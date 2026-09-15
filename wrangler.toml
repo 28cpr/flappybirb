@@ -1,0 +1,12 @@
+name = "flappy-roguelite"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "public"
+
+# Global scoreboard storage. Create the namespace once with:
+#   npx wrangler kv namespace create SCORES
+# then paste the returned id below (and a preview_id for `wrangler pages dev`).
+# Without this binding the game still runs; global scores just stay disabled.
+[[kv_namespaces]]
+binding = "SCORES"
+id = "REPLACE_WITH_YOUR_KV_ID"
+preview_id = "REPLACE_WITH_YOUR_PREVIEW_KV_ID"

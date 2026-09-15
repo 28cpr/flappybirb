@@ -1,0 +1,3282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Flappy Roguelite</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #10131a;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: #e8ecf4;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+  #wrap {
+    position: relative;
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #stage {
+    position: relative;
+    box-shadow: 0 0 0 2px #2a3242, 0 24px 60px rgba(0,0,0,.6);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  canvas { display: block; }
+
+  /* ---------- overlay panels ---------- */
+  .panel {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(8,10,16,.86);
+    backdrop-filter: blur(3px);
+    padding: 18px;
+    text-align: center;
+  }
+  .panel.show { display: flex; }
+
+  h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: 1px; }
+  h2 { margin: 0 0 4px; font-size: 19px; letter-spacing: .5px; }
+  .sub { font-size: 12px; color: #8f9ab2; line-height: 1.6; margin-bottom: 14px; }
+  .big { font-size: 40px; font-weight: bold; color: #ffd166; margin: 2px 0; }
+
+  /* ---------- upgrade cards ---------- */
+  #cards { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .card {
+    width: 150px;
+    background: #171c27;
+    border: 2px solid #2c3444;
+    border-radius: 8px;
+    padding: 12px 10px;
+    cursor: pointer;
+    transition: transform .1s, border-color .1s, background .1s;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card:hover { transform: translateY(-3px); border-color: #4f7cff; background: #1c2331; }
+  .card .icon { font-size: 24px; }
+  .good, .bad { border-radius: 5px; padding: 6px; }
+  .good { background: rgba(45,180,120,.12); }
+  .bad  { background: rgba(220,70,90,.12); }
+  .tag { font-size: 9px; letter-spacing: 1.5px; opacity: .75; display: block; margin-bottom: 3px; }
+  .good .tag { color: #4ade80; }
+  .bad .tag { color: #f87171; }
+  .card .name { font-size: 12px; font-weight: bold; line-height: 1.3; }
+  .card .desc { font-size: 10px; color: #9aa5bd; line-height: 1.35; margin-top: 2px; }
+
+  button {
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    color: #0b0e14; background: #ffd166;
+    border: 0; border-radius: 6px;
+    padding: 10px 22px; cursor: pointer;
+    letter-spacing: .5px;
+  }
+  button:hover { background: #ffdd8a; }
+  .keyhint { font-size: 10px; color: #6b768e; margin-top: 12px; }
+  button.ghost {
+    background: transparent; color: #9aa5bd;
+    border: 1px solid #39415a; margin-left: 8px;
+  }
+  button.ghost:hover { background: #1c2331; color: #e8ecf4; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tab {
+    background: transparent; color: #7e8aa3;
+    border: 1px solid #2c3444; border-radius: 5px;
+    padding: 5px 14px; font-size: 10px; letter-spacing: 1px; margin: 0;
+  }
+  .tab.on { background: #1c2331; color: #e8ecf4; border-color: #4f7cff; }
+  .namerow {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 12px; font-size: 10px; color: #6b768e; letter-spacing: 1px;
+  }
+  .namerow input {
+    background: #171c27; border: 1px solid #2c3444; border-radius: 5px;
+    color: #e8ecf4; font-family: inherit; font-size: 11px;
+    padding: 5px 8px; width: 130px;
+  }
+  .namerow input:focus { outline: none; border-color: #4f7cff; }
+  .sname { color: #cbd5e5; width: 86px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #scoreList {
+    width: 100%; max-width: 360px; max-height: 300px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 5px; text-align: left;
+  }
+  .srow {
+    display: flex; align-items: center; gap: 10px;
+    background: #171c27; border: 1px solid #2c3444; border-radius: 6px;
+    padding: 8px 10px; cursor: pointer; font-size: 11px;
+  }
+  .srow:hover { border-color: #4f7cff; background: #1c2331; }
+  .srank { color: #6b768e; width: 20px; }
+  .sscore { color: #ffd166; font-weight: bold; font-size: 14px; width: 54px; }
+  .smeta { color: #8f9ab2; flex: 1; }
+  .splay { color: #4ade80; font-size: 10px; letter-spacing: 1px; }
+  #replayTag {
+    position: absolute; left: 12px; top: 12px; z-index: 5;
+    font-size: 11px; color: #4ade80; letter-spacing: 1px;
+    background: rgba(8,10,16,.75); padding: 5px 9px; border-radius: 5px;
+    display: none;
+  }
+  #replayTag.show { display: block; }
+  #runlist { font-size: 10px; color: #7e8aa3; max-width: 460px; line-height: 1.7; margin-top: 10px; }
+  #runlist b { color: #b9c4da; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="replayTag">● REPLAY — ESC to exit</div>
+
+    <!-- START -->
+    <div class="panel show" id="startPanel">
+      <h1>FLAPPY ROGUELITE</h1>
+      <div class="sub">
+        Click / Space / Tap to flap.<br>
+        Every <b>5 pipes</b>: pick a blessing — each comes chained to a curse.
+      </div>
+      <button id="startBtn">START</button>
+      <button id="scoresBtn" class="ghost">HIGH SCORES</button>
+      <div class="keyhint">SPACE or CLICK to flap &nbsp;·&nbsp; P to pause</div>
+    </div>
+
+    <!-- UPGRADE -->
+    <div class="panel" id="upPanel">
+      <h2 id="upTitle">CHOOSE YOUR BARGAIN</h2>
+      <div class="sub" id="upSub">Pipe 5 · every gift has a price</div>
+      <div id="cards"></div>
+      <div class="keyhint">Press 1 / 2 / 3 to choose</div>
+    </div>
+
+    <!-- GAME OVER -->
+    <div class="panel" id="overPanel">
+      <h2>GAME OVER</h2>
+      <div class="big" id="finalScore">0</div>
+      <div class="sub" id="finalSub">0 pipes</div>
+      <div id="runlist"></div>
+      <br>
+      <button id="againBtn">RETRY</button>
+      <button id="overScores" class="ghost">HIGH SCORES</button>
+      <div class="keyhint" id="overHint">SPACE / R to restart</div>
+    </div>
+
+    <!-- SCORES -->
+    <div class="panel" id="scoresPanel">
+      <h2 id="scoresTitle">YOUR BEST RUNS</h2>
+      <div class="tabs">
+        <button class="tab on" id="tabMine">PERSONAL</button>
+        <button class="tab" id="tabGlobal">GLOBAL</button>
+      </div>
+      <div class="sub" id="scoresSub">Click a run to watch the replay</div>
+      <div id="scoreList"></div>
+      <div class="namerow" id="nameRow">
+        <label for="nameIn">NAME</label>
+        <input id="nameIn" maxlength="14" placeholder="anon" autocomplete="off">
+      </div>
+      <br>
+      <button id="scoresBack">BACK</button>
+      <div class="keyhint">ESC to go back</div>
+    </div>
+
+    <!-- PAUSE -->
+    <div class="panel" id="pausePanel">
+      <h2>PAUSED</h2>
+      <div class="sub">P or click to resume</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+// ============================================================
+//  SETUP
+// ============================================================
+// ---------------------------------------------------------------------------
+// Deterministic randomness. Every gameplay roll goes through rnd() rather than
+// Math.random(), so a run can be replayed exactly from its seed plus the frames
+// on which the player flapped. Replays therefore cost a few hundred bytes
+// instead of a video file.
+// ---------------------------------------------------------------------------
+let __seed = 1;
+function seedRun(n) { __seed = (n >>> 0) || 1; }
+function rnd() {
+  // mulberry32 — small, fast, good enough for gameplay scatter.
+  __seed |= 0; __seed = (__seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(__seed ^ (__seed >>> 15), 1 | __seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+const W = 420, H = 640;
+const cv  = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+const stage = document.getElementById("stage");
+
+// Handle HiDPI + fit-to-window scaling.
+function fit() {
+  const dpr = window.devicePixelRatio || 1;
+  const scale = Math.min(window.innerWidth / W, window.innerHeight / H, 1.35);
+  stage.style.width  = (W * scale) + "px";
+  stage.style.height = (H * scale) + "px";
+  cv.style.width  = (W * scale) + "px";
+  cv.style.height = (H * scale) + "px";
+  cv.width  = Math.round(W * scale * dpr);
+  cv.height = Math.round(H * scale * dpr);
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+}
+window.addEventListener("resize", fit);
+fit();
+
+const $ = id => document.getElementById(id);
+const panels = {
+  start: $("startPanel"), up: $("upPanel"),
+  over:  $("overPanel"),  pause: $("pausePanel"),
+  scores: $("scoresPanel")
+};
+function showPanel(name) {
+  for (const k in panels) panels[k].classList.toggle("show", k === name);
+}
+function hidePanels() { for (const k in panels) panels[k].classList.remove("show"); }
+
+// ============================================================
+//  BASE TUNING  (all mutable values live on `S` per-run)
+// ============================================================
+const BASE = {
+  gravity:    1500,   // px/s^2
+  flap:      -430,    // px/s instantaneous
+  speed:      165,    // px/s pipe scroll
+  gap:        168,    // px vertical gap
+  spacing:    230,    // px horizontal distance between pipes
+  maxFall:    620
+};
+
+const GROUND_H = 74;
+const BIRD_X   = 108;
+const BIRD_R   = 13;
+const MAX_ROT  = 1.1;   // beak-down rotation cap; bounce requires reaching it
+
+// ---- SKY LAYER -----------------------------------------------------------
+// The world extends upward past the normal playfield. y === 0 is the top of the
+// pipe zone; negative y is sky. The cloud deck sits just above the pipes, and
+// crossing it swaps pipes for Greek pillars. SKY_TOP is the hard ceiling: flap
+// power fades to nothing as the bird approaches it, so it can be reached but
+// never exceeded.
+const CLOUD_Y   = -118;   // world y of the cloud deck (its middle)
+const CLOUD_TH  = 228;    // deck thickness, 3x the original 76
+const SKY_TOP   = CLOUD_Y - H;  // ceiling: flush with the top of the sky view
+const SKY_SPAN  = CLOUD_Y - SKY_TOP;
+const HIGH_Y    = -430;   // altitude of the scattered high-cloud layer
+
+// Camera position for the sky view: the middle of the cloud deck sits exactly
+// at the bottom edge of the screen, so only the deck's upper half is in frame
+// and the pipe zone is far below the view.
+const SKY_CAM   = SKY_TOP;
+
+// Hanging columns start above the top of the sky view so their cut ends are
+// never visible. SKY_TOP is still the collision ceiling for the bird.
+const PILLAR_TOP = SKY_CAM - 60;
+
+// Oxygen. Drain is measured in world distance rather than seconds, so "five
+// pillars' worth of air" stays true no matter how fast the world is scrolling.
+const O2_PILLARS = 5;                        // pillars of air on a full tank
+const O2_WARN    = 0.5 / O2_PILLARS;         // warn with half a pillar left
+const O2_REFILL  = 0.5;                      // recharge at half the drain rate
+
+// Pillars in the sky lurch up or down. Each move is telegraphed with a shudder
+// before it commits, so it reads as a threat to fly around rather than a
+// random death.
+const PIL_TELL   = 0.55;   // seconds of warning shudder
+const PIL_MOVE   = 0.30;   // seconds the move itself takes
+const PIL_DIST   = 90;     // px travelled, about half a gap
+
+// HUNGRY PIPES telegraphs its lunge the same way pillars telegraph a move:
+// a brief shudder with an arrow on each pipe before the field surges.
+const LURCH_TELL = 0.32;
+
+// Top pipes run up to the underside of the cloud deck rather than stopping at
+// y = 0, so there is no empty band between the pipe tops and the clouds.
+// Top of the pipe collision surface. Sits low enough in the cloud deck that the
+// pipe is still visible where it becomes solid — deeper than this and the top
+// pipe is an invisible obstacle inside the haze. The 90px overdraw above it
+// still ends in the deck's dense core, so no cut end shows.
+const PIPE_TOP  = CLOUD_Y + CLOUD_TH * 0.35;
+
+// Raised lip along each inner face of a tunnel's U.
+const TUNNEL_RIM = 14;
+
+// Wall thickness of a tunnel's U tube. Each half is a pipe of constant
+// thickness that runs down, bends horizontally, and runs back up.
+const TUNNEL_WALL = 30;
+
+// Pipe bodies are drawn this far past the cloud deck and the ground. Purely
+// visual overdraw: WANDERING PIPES sways the gap and LEANING PIPES tilts the
+// whole pair, either of which can otherwise lift a pipe's cut end into view.
+// Collision still uses the true bounds.
+const PIPE_OVERDRAW = 90;
+
+// 0 at the cloud deck, 1 at the ceiling.
+function skyT(y) {
+  return Math.max(0, Math.min(1, (CLOUD_Y - y) / SKY_SPAN));
+}
+
+// LEANING PIPES. The whole pair pivots about its gap centre, so top and bottom
+// stay on one line. The safe angle depends on how close the pipes are: two
+// neighbours leaning toward each other must not intersect, and the worst case
+// is a long segment whose pivot sits near the far end. Solving
+//   2 * (dy*sin(a) + w/2*cos(a) - w/2) < spacing - w
+// for the longest possible segment gives the ceiling below, with a 0.8 safety
+// factor on top. At the 120px CROWDED PIPES floor that is ~2.8 degrees.
+const TILT_STEP = 0.022;                       // radians added per pick
+
+// ROCKING PIPES. Same pivot as LEANING PIPES, but fast enough that a pipe
+// visibly swings through a full arc in the time it crosses the screen —
+// LEANING is a slow static-looking lean, ROCKING is motion you have to time.
+const ROCK_STEP = 0.030;   // radians of amplitude per pick
+const ROCK_RATE = 2.6;     // base angular frequency
+
+function tiltCap(spacing) {
+  const dyMax = (H - GROUND_H) - 46;           // longest pivot-to-end distance
+  const room  = (spacing - 56) / 2;            // horizontal budget per pipe
+  // Small-angle solve: dy*sin(a) + (w/2)(cos(a)-1) ~= dy*a
+  return Math.min(0.16, Math.max(0, room / dyMax)) * 0.8;
+}
+
+const PLAYER_PAL = { hi:"#ffe38a", lo:"#f0a92c", line:"#8a5a10",
+                     wing:"#fff3c4", wingLine:"#c98d1c" };
+
+// Hostile flock colours — deliberately cool-toned so they never read as the
+// player's warm yellow at a glance.
+const FOE_PALS = [
+  { hi:"#bcd9ff", lo:"#3b82f6", line:"#1e3a8a", wing:"#e0edff", wingLine:"#2563eb", beak:"#f59e0b" },
+  { hi:"#ffc6e0", lo:"#ec4899", line:"#831843", wing:"#ffe4f1", wingLine:"#db2777", beak:"#f59e0b" },
+  { hi:"#d8c9ff", lo:"#8b5cf6", line:"#4c1d95", wing:"#ede9fe", wingLine:"#7c3aed", beak:"#f59e0b" },
+  { hi:"#a7f3d0", lo:"#10b981", line:"#064e3b", wing:"#d1fae5", wingLine:"#059669", beak:"#f59e0b" }
+];
+
+let S = null;      // run state
+let mode = "start"; // start | play | upgrade | over | pause
+
+// ============================================================
+//  UPGRADE POOL
+//   effect(S) applies the blessing; curse(S) applies the cost.
+// ============================================================
+const BLESSINGS = [
+  { id:"dbl",   icon:"✦", name:"DOUBLE SCORE",
+    desc:"Each pipe is worth 2× more.",
+    apply: s => { s.scoreMult *= 2; } },
+
+  { id:"slow",  icon:"🐢", name:"SLOW MOTION",
+    desc:"World runs 15% slower.",
+    apply: s => { s.timeScale *= 0.85; } },
+
+  { id:"life",  icon:"♥", name:"EXTRA LIFE",
+    desc:"Survive one crash.",
+    apply: s => { s.lives += 1; } },
+
+  { id:"gap",   icon:"↕", name:"WIDE GAPS",
+    desc:"Pipe gaps +26px.",
+    apply: s => { s.gap += 26; } },
+
+  { id:"float", icon:"🪶", name:"FEATHER FALL",
+    desc:"Gravity reduced 18%.",
+    apply: s => { s.gravity *= 0.82; } },
+
+  { id:"small", icon:"◦", name:"SHRINK",
+    desc:"Bird hitbox 30% smaller.",
+    apply: s => { s.radius *= 0.7; } },
+
+  { id:"shield",icon:"◈", name:"PHASE SHIELD",
+    desc:"Next 3 hits pass harmlessly.",
+    apply: s => { s.shields += 3; } },
+
+  { id:"magnet",icon:"⊙", name:"COIN MAGNET",
+    desc:"Gap centers drift toward you.",
+    apply: s => { s.magnet = true; } },
+
+  { id:"light", icon:"↓", name:"LIGHT TOUCH",
+    desc:"Flaps 14% gentler — finer control.",
+    apply: s => { s.flap *= 0.86; s.flapFloor = true; } },
+
+  { id:"spread",icon:"↔", name:"OPEN ROAD",
+    desc:"Pipes spawn 34px further apart.",
+    apply: s => { s.spacing = Math.min(420, s.spacing + 34); } },
+
+  { id:"bazooka",icon:"🚀", name:"BAZOOKA",
+    desc:"Every 10 flaps, fire a rocket that blasts a hole in a pipe.",
+    apply: s => {
+      // 1st pick: every 10 flaps.  2nd: every 5.  Every pick after that adds
+      // another rocket to the volley, fired in a vertical spread.
+      if (!s.bazooka) { s.bazooka = 10; s.rocketCount = 1; }
+      else if (s.bazooka > 5) { s.bazooka = 5; }
+      else { s.rocketCount++; }
+    } },
+
+  { id:"bouncy",icon:"⤴", name:"BOUNCY BEAK",
+    desc:"Dive beak-first at full tilt and bounce off floors unharmed.",
+    apply: s => { s.bouncy = true; } },
+
+  { id:"income",icon:"⏱", name:"STEADY INCOME",
+    desc:"Earn 1 point every second, just for staying alive.",
+    apply: s => { s.income += 1; } },
+
+  { id:"combo", icon:"✸", name:"COMBO STREAK",
+    desc:"+1 bonus per 3 pipes in a row.",
+    apply: s => { s.combo = true; } }
+];
+
+const CURSES = [
+  { id:"upside", icon:"⤒", name:"UPSIDE DOWN",
+    desc:"Gravity is inverted — you fall upward, and flap down.",
+    apply: s => {
+      s.upsideDown = !s.upsideDown;
+      s.baseGravDir = s.upsideDown ? -1 : 1;
+      s.gravDir = s.baseGravDir;
+    } },
+
+  { id:"invert", icon:"⇅", name:"UNSTABLE GRAVITY",
+    desc:"Gravity flips every 2 flaps — but pulls half as hard.",
+    apply: s => {
+      if (s.invertEvery) {
+        s.invertEvery = Math.max(1, s.invertEvery - 1);
+      } else {
+        s.invertEvery = 2;
+        // Halve gravity so a flip is something you can read and correct
+        // rather than a fall too fast to calculate. Flap power scales with
+        // it (sqrt, since apex rise goes as flap^2/gravity) — otherwise a
+        // single flap would float clean over the gap.
+        s.gravity *= 0.5;
+        s.flap *= Math.SQRT1_2;
+        s.unstableDiscount = true;
+      }
+    } },
+
+  { id:"heavy",  icon:"⬇", name:"HEAVY BONES",
+    desc:"Gravity +28%.",
+    apply: s => { s.gravity *= 1.28; } },
+
+  { id:"fast",   icon:"»", name:"HASTE",
+    desc:"World speed +22%.",
+    apply: s => { s.speed *= 1.22; } },
+
+  { id:"tight",  icon:"→←", name:"CROWDED PIPES",
+    desc:"Pipes 30px closer together.",
+    apply: s => { s.spacing = Math.max(120, s.spacing - 30); } },
+
+  { id:"narrow", icon:"▮▮", name:"NARROW GAPS",
+    desc:"Pipe gaps −22px.",
+    apply: s => { s.gap = Math.max(92, s.gap - 22); } },
+
+  { id:"fog",    icon:"☁", name:"FOG",
+    desc:"Dense cloud swallows the pipes ahead.",
+    apply: s => { s.fog = Math.min(3, s.fog + 1); } },
+
+  { id:"wobble", icon:"∿", name:"WANDERING PIPES",
+    desc:"Pipe gaps sway up and down.",
+    apply: s => { s.wobble += 26; } },
+
+  { id:"slippery",icon:"↯", name:"TWITCHY WINGS",
+    desc:"Flap power varies randomly.",
+    apply: s => { s.jitter += 0.18; } },
+
+  { id:"big",    icon:"◯", name:"BLOAT",
+    desc:"Bird hitbox 30% larger.",
+    apply: s => { s.radius *= 1.3; } },
+
+  { id:"spikes", icon:"▲", name:"SPIKED RIMS",
+    desc:"Gap edges grow inward spikes.",
+    apply: s => { s.spikes += 1; } },
+
+  { id:"lurch",  icon:"⇤", name:"HUNGRY PIPES",
+    desc:"Every 3 flaps, the pipes lunge at you.",
+    apply: s => {
+      if (s.lurchEvery) s.lurchEvery = Math.max(1, s.lurchEvery - 1);
+      else s.lurchEvery = 3;
+      s.lurchDist += 34;
+    } },
+
+  { id:"heave",  icon:"⇈", name:"WILD WINGS",
+    desc:"Flaps 20% stronger — big overshoots.",
+    apply: s => { s.flap *= 1.2; } },
+
+  { id:"tilt",   icon:"◫", name:"LEANING PIPES",
+    desc:"Pipe pairs sway off vertical, each on its own rhythm.",
+    apply: s => { s.tilt += TILT_STEP; } },
+
+  { id:"rock",   icon:"⟲", name:"ROCKING PIPES",
+    desc:"Pipes rock back and forth, visibly swinging as you approach.",
+    apply: s => { s.rock += ROCK_STEP; } },
+
+  { id:"flock",  icon:"🐦", name:"ONCOMING FLOCK",
+    desc:"Rival birds fly at you, twice as fast as the pipes.",
+    apply: s => { s.flock += 1; } },
+
+  { id:"split",  icon:"⧉", name:"SPLIT PIPES",
+    desc:"Every pipe has two narrow gaps.",
+    apply: s => { s.splitAlways = true; } }
+];
+
+// ============================================================
+//  RUN STATE
+// ============================================================
+function newRun() {
+  return {
+    // physics / world (mutable copies of BASE)
+    gravity: BASE.gravity, flap: BASE.flap, speed: BASE.speed,
+    gap: BASE.gap, spacing: BASE.spacing, radius: BIRD_R,
+    timeScale: 1,
+
+    // modifiers
+    scoreMult: 1, lives: 1, shields: 0,
+    income: 0, incomeAcc: 0, incomeEarned: 0,
+    invertEvery: 0, fog: 0, wobble: 0, jitter: 0, spikes: 0,
+    lurchEvery: 0, lurchDist: 0, splitAlways: false, unstableDiscount: false,
+    lurchQueue: 0, lurchTotal: 0, lurchPaid: 0, lurchT: 0, lurchDur: 0.32,
+    lurchWarn: 0, lurchPend: 0,
+    flock: 0, foes: [], foeTimer: 2.2, tilt: 0, rock: 0,
+    bazooka: 0, rocketCount: 1, rockets: [], kills: 0, holes: 0,
+    cam: 0, inSky: false, pillars: [], nextPillarX: W + 140, pillarsPassed: 0,
+    o2: 1, o2Out: false,
+    magnet: false, combo: false, bouncy: false,
+    bounceCool: 0, bounces: 0,
+
+    // bird
+    y: H / 2, vy: 0, rot: 0, gravDir: 1, baseGravDir: 1,
+    upsideDown: false, flapCount: 0,
+    flapAnim: 0, invulnT: 0,
+
+    // pipes + score
+    pipes: [], nextX: W + 140,
+    score: 0, pipesPassed: 0, streak: 0,
+    nextUpgradeAt: 5,
+    taken: [],
+
+    // fx
+    particles: [], shake: 0, flash: 0, t: 0, scrollX: 0
+  };
+}
+
+// ============================================================
+//  PIPES
+// ============================================================
+// ---------------------------------------------------------------------------
+// SPECIAL PIPES
+// Each entry builds one non-standard pipe. `weight` sets its share of the
+// special roll relative to its siblings, and `ready(s)` gates it until the run
+// has progressed far enough. Add new types here — the spawn logic needs no
+// change.
+// ---------------------------------------------------------------------------
+const SPECIAL_CHANCE = 0.30;            // share of pipes that are special
+
+// Builds one V-shaped pipe. `dir` -1 narrows toward the exit, +1 widens.
+function makeV(s, margin, dir, at) {
+  const wide   = Math.max(120, s.gap * 1.15);
+  const narrow = Math.max(86, s.gap * 0.72);
+  const gWide   = dir < 0 ? wide : narrow;
+  const gNarrow = dir < 0 ? narrow : wide;
+
+  const biggest = Math.max(gWide, gNarrow) / 2;
+  const minC = 30 + margin + biggest;
+  const maxC = (H - GROUND_H) - margin - biggest;
+  const c = minC + rnd() * Math.max(10, maxC - minC);
+
+  s.pipes.push({
+    x: s.nextX, vee: true, split: false,
+    vDir: dir, vAt: at,
+    gWide, gNarrow,
+    c, base: c,
+    phase: rnd() * Math.PI * 2,
+    tiltPhase: rnd() * Math.PI * 2,
+    tiltRate: 0.5 + rnd() * 0.7,
+    rockPhase: rnd() * Math.PI * 2,
+    rockRate: 0.85 + rnd() * 0.35,
+    passed: false,
+    w: 118
+  });
+  s.nextX += s.spacing + 50;
+}
+
+function makeChevron(s, margin, down, at) {
+  const gap = Math.max(112, s.gap * 0.98);
+  const thick = 30;                            // wall thickness of each arm
+  const spread = Math.max(104, gap * 0.92);    // half-height of the X
+  // Crossing sits a little inside the edge, so the two arms on that side bury
+  // into the ceiling/floor while the other two hang into the playfield.
+  const inset  = spread * 0.45;
+  const c = (H - GROUND_H) / 2;                // unused for X, kept for sway
+
+  s.pipes.push({
+    x: s.nextX, chevron: true, split: false,
+    cvDown: down, cvAt: at,
+    gap, thick, spread, inset,
+    c, base: c,
+    phase: rnd() * Math.PI * 2,
+    tiltPhase: rnd() * Math.PI * 2,
+    tiltRate: 0.5 + rnd() * 0.7,
+    rockPhase: rnd() * Math.PI * 2,
+    rockRate: 0.85 + rnd() * 0.35,
+    passed: false,
+    w: 168
+  });
+  s.nextX += s.spacing + 70;
+}
+
+const SPECIALS = [
+  {
+    id: "chevron",
+    weight: 1,
+    ready: s => s.pipesPassed >= 5,
+    make: (s, margin) => {
+      // \/ (tip toward the gap) or /\ (tip away), hanging from the top, the
+      // bottom, or closing in from both.
+      const down = rnd() < 0.5;
+      const at = ["top", "bottom", "both"][(rnd() * 3) | 0];
+      makeChevron(s, margin, down, at);
+    }
+  },
+  {
+    id: "vee",
+    weight: 1,
+    ready: s => s.pipesPassed >= 4,
+    make: (s, margin) => {
+      // Either a funnel that closes on you or one that opens out, hanging from
+      // the top, the bottom, or pinching from both.
+      const dir = rnd() < 0.5 ? -1 : 1;
+      const at = ["top", "bottom", "both"][(rnd() * 3) | 0];
+      makeV(s, margin, dir, at);
+    }
+  },
+  {
+    id: "tunnel",
+    weight: 1,
+    ready: s => s.pipesPassed >= 6,
+    make: (s, margin) => {
+      // The corridor is taller than a normal gap — it has to be, because you
+      // are committed to it for its whole length rather than crossing a single
+      // edge.
+      const g = Math.max(96, s.gap * 0.86);
+      const half = g / 2;
+      const minC = 30 + margin + half;
+      const maxC = (H - GROUND_H) - margin - half;
+      const c = minC + rnd() * Math.max(10, maxC - minC);
+      s.pipes.push({
+        x: s.nextX, tunnel: true, split: false,
+        c, base: c, g,
+        phase: rnd() * Math.PI * 2,
+        tiltPhase: rnd() * Math.PI * 2,
+        tiltRate: 0.5 + rnd() * 0.7,
+        rockPhase: rnd() * Math.PI * 2,
+        rockRate: 0.85 + rnd() * 0.35,
+        passed: false,
+        w: 150                             // the corridor's length
+      });
+      s.nextX += s.spacing + 90;           // extra room after a tunnel
+    }
+  }
+];
+
+// Picks one eligible special by weight, or null if none are ready.
+function rollSpecial(s) {
+  const pool = SPECIALS.filter(sp => sp.ready(s));
+  if (!pool.length) return null;
+  let total = 0;
+  for (const sp of pool) total += sp.weight;
+  let r = rnd() * total;
+  for (const sp of pool) { r -= sp.weight; if (r <= 0) return sp; }
+  return pool[pool.length - 1];
+}
+
+function spawnPipe(s) {
+  const margin = 58;
+  const top = 30, bot = H - GROUND_H - 30;
+
+  // Specials roll FIRST, so SPECIAL_CHANCE means that share of every pipe
+  // rather than a share of whatever the split roll leaves behind. This runs
+  // even under the SPLIT PIPES curse — that curse makes every *ordinary* pipe
+  // a double-gap one, it does not remove specials from the run.
+  if (rnd() < SPECIAL_CHANCE) {
+    const sp = rollSpecial(s);
+    if (sp) { sp.make(s, margin); return; }
+  }
+
+  // Double-gap pipes: one opening near the top, one near the bottom, with a
+  // solid block between them. They ramp in with progress and are forced on by
+  // the SPLIT PIPES curse.
+  const chance = s.splitAlways ? 1 : Math.min(0.45, Math.max(0, (s.pipesPassed - 6) * 0.02));
+  const split = rnd() < chance;
+
+  if (split) {
+    // Each opening is meaningfully tighter than a normal gap, but there are
+    // two of them, so the real difficulty is committing to one early.
+    // Floor accounts for what spikes and a bloated hitbox eat out of the opening.
+    const floor = 78 + s.spikes * 14 + Math.max(0, s.radius - BIRD_R) * 2;
+    const g = Math.max(floor, s.gap * 0.62);
+    const midMin = 58;                       // solid block between the two
+    const span = bot - top;
+    const slack = Math.max(0, span - (g * 2 + midMin));
+    // Distribute leftover room: some above, some below, rest thickens the middle.
+    const a = rnd() * slack * 0.5;
+    const b = rnd() * slack * 0.5;
+    const cTop = top + a + g / 2;
+    const cBot = bot - b - g / 2;
+    s.pipes.push({
+      x: s.nextX, split: true, g,
+      baseTop: cTop, baseBot: cBot,
+      phase: rnd() * Math.PI * 2,
+      tiltPhase: rnd() * Math.PI * 2,
+      tiltRate: 0.5 + rnd() * 0.7,
+      rockPhase: rnd() * Math.PI * 2,
+      rockRate: 0.85 + rnd() * 0.35,
+      passed: false, w: 56
+    });
+  } else {
+    const half = s.gap / 2;
+    const minC = margin + half;
+    const maxC = H - GROUND_H - margin - half;
+    const c = minC + rnd() * Math.max(10, maxC - minC);
+    s.pipes.push({
+      x: s.nextX, split: false, c, base: c,
+      phase: rnd() * Math.PI * 2,
+      tiltPhase: rnd() * Math.PI * 2,
+      tiltRate: 0.5 + rnd() * 0.7,
+      rockPhase: rnd() * Math.PI * 2,
+      rockRate: 0.85 + rnd() * 0.35,
+      passed: false, w: 56
+    });
+  }
+  s.nextX += s.spacing;
+}
+
+// Current lean of a pipe, in radians. Each pipe uses its own phase and rate so
+// the field never sways in unison.
+function tiltOf(s, p) {
+  if (!s.tilt && !s.rock) return 0;
+  const cap = tiltCap(s.spacing);
+
+  // Slow lean: reads as a fixed angle over the time a pipe is on screen.
+  let a = 0;
+  if (s.tilt) a += Math.sin(s.t * p.tiltRate + p.tiltPhase) * Math.min(s.tilt, cap);
+
+  // Fast rock: a visible swing back and forth, each pipe on its own phase.
+  if (s.rock) {
+    a += Math.sin(s.t * ROCK_RATE * p.rockRate + p.rockPhase) * Math.min(s.rock, cap);
+  }
+
+  // The combined angle is still bound by what keeps neighbours from touching.
+  return Math.max(-cap, Math.min(cap, a));
+}
+
+// The pair pivots about the centre of its opening, keeping top and bottom
+// collinear. For a split pipe, the midpoint between the two openings.
+function pivotY(s, p) {
+  const bands = gapsOf(s, p);
+  return bands.length > 1
+    ? (bands[0].lo + bands[bands.length - 1].hi) / 2
+    : (bands[0].lo + bands[0].hi) / 2;
+}
+
+// Returns the open bands of a pipe as [{lo, hi}, ...] top-to-bottom.
+// Everything outside these bands (within 0..H-GROUND_H) is solid.
+// How far this pipe is currently displaced by WANDERING PIPES. Blast holes are
+// stored relative to the un-swayed pipe and shifted by this, so damage travels
+// with the pipe instead of being left behind as floating fragments.
+function swayOf(s, p) {
+  return s.wobble > 0 ? Math.sin(s.t * 1.6 + p.phase) * s.wobble : 0;
+}
+
+// The current centre of a single-gap pipe, after sway, magnet and clamping —
+// the same value gapsOf derives its band from.
+function gapCentreOf(s, p) {
+  const bot = H - GROUND_H;
+  if (p.chevron) {
+    const b = gapsOf(s, p)[0];
+    return (b.lo + b.hi) / 2;
+  }
+
+  if (p.vee) {
+    const vh = Math.min(p.gWide, p.gNarrow) / 2;
+    const vc = p.base + swayOf(s, p);
+    return Math.max(30 + vh, Math.min(bot - 30 - vh, vc));
+  }
+
+  if (p.tunnel) {
+    const th = p.g / 2;
+    const tc = p.base + swayOf(s, p);
+    return Math.max(30 + th, Math.min(bot - 30 - th, tc));
+  }
+
+  let c = p.base + swayOf(s, p);
+  if (s.magnet) {
+    const d = (p.x - BIRD_X) / 320;
+    if (d > 0 && d < 1) c += (s.y - c) * (1 - d) * 0.45;
+  }
+  const half = s.gap / 2;
+  return Math.max(30 + half, Math.min(bot - 30 - half, c));
+}
+
+// A tunnel is two U-shaped tubes: a ∩ hanging from the cloud deck and a U
+// rising from the ground, their bends facing each other to form the corridor.
+// Each U is three rectangles — two legs and the bend — so the inside of each U
+// is hollow, exactly like a real bent pipe.
+// A V pipe: the opening tapers across its width. `p.vDir` is -1 for a funnel
+// that narrows as you fly in (V) and +1 for one that widens (inverted). `p.vAt`
+// is "top" or "bottom" — which edge of the screen the wedge hangs from.
+// Built from thin vertical slices so collision follows the taper exactly, the
+// same approach tunnels use for their bent tubes.
+const V_SLICES = 12;
+
+function vParts(s, p, forDrawing) {
+  const bot = H - GROUND_H;
+  const over = forDrawing ? PIPE_OVERDRAW : 0;
+  const sway = swayOf(s, p);
+  const sliceW = p.w / V_SLICES;
+  const out = [];
+
+  for (let i = 0; i < V_SLICES; i++) {
+    const t = (i + 0.5) / V_SLICES;             // 0..1 across the pipe
+    // Opening half-height interpolates from wide to narrow (or the reverse).
+    const half = (p.gWide + (p.gNarrow - p.gWide) * t) / 2;
+    const c = Math.max(30 + half, Math.min(bot - 30 - half, p.base + sway));
+    const x = p.x + i * sliceW;
+    const w = sliceW + 0.6;                     // slight overlap, no seams
+
+    if (p.vAt !== "bottom") out.push({ x, y: PIPE_TOP - over, w, h: (c - half) - (PIPE_TOP - over) });
+    if (p.vAt !== "top")    out.push({ x, y: c + half, w, h: (bot + over) - (c + half) });
+  }
+  return cutHoles(s, p, out.filter(r => r.h > 0));
+}
+
+// A CHEVRON pipe: the body itself is a \/ or /\ — two diagonal arms meeting at
+// a point. `p.cvDown` true means the tip points toward the gap (\/ hanging from
+// the top), false means it points away (/\). `p.cvAt` is "top", "bottom" or
+// "both". Sliced like the V so collision follows the diagonals exactly.
+const CHEV_SLICES = 16;
+
+// Cuts blast holes out of a list of solid rectangles. Shared by every sliced
+// shape (V, chevron, tunnel) so a hole always removes material instead of
+// being merged in as a full-width band the collision code never consults.
+function cutHoles(s, p, parts) {
+  if (!p.holes || !p.holes.length) return parts;
+  const off = swayOf(s, p);
+  let out = parts;
+  for (const hRaw of p.holes) {
+    const h = { lo: hRaw.lo + off, hi: hRaw.hi + off };
+    const next = [];
+    for (const r of out) {
+      const rTop = r.y, rBot = r.y + r.h;
+      if (h.hi <= rTop || h.lo >= rBot) { next.push(r); continue; }
+      if (h.lo > rTop) next.push({ x: r.x, y: rTop, w: r.w, h: h.lo - rTop });
+      if (h.hi < rBot) next.push({ x: r.x, y: h.hi, w: r.w, h: rBot - h.hi });
+    }
+    out = next;
+  }
+  return out.filter(r => r.h > 0.5);
+}
+
+// Geometry of one chevron, as the line the arms follow plus the legs that
+// anchor it to the screen edge. Rendering draws this as real diagonals;
+// collision samples it into slices.
+// An X: two diagonals crossing at a centre that sits close to the ceiling or
+// the floor. The two arms pointing away from that edge reach into the
+// playfield and form the obstacle; the two pointing toward it are extended by
+// legs so the X is anchored rather than floating.
+// An X whose strokes run all the way to the anchoring edge. Each stroke starts
+// at a far end out in the playfield, passes through the crossing point, and
+// continues to the ceiling or floor — so the two halves have different slopes
+// and the X is deliberately asymmetric. No separate legs.
+// A true X: two straight strokes, each spanning the full width of the pipe and
+// crossing at its centre. One runs top-left to bottom-right, the other
+// top-right to bottom-left, so the shape is symmetric about the vertical
+// centreline. The crossing sits close to the anchoring edge, which puts the
+// two upper arms into the ceiling and leaves the two lower arms hanging into
+// the playfield (mirrored for a floor-mounted X).
+function chevronShape(s, p) {
+  const bot = H - GROUND_H;
+  const sway = swayOf(s, p);
+  const mx = p.x + p.w / 2;
+  const out = [];
+
+  if (p.cvAt !== "bottom") {
+    // Crossing close enough to the ceiling that the upper arms bury into it.
+    const cy = PIPE_TOP + p.inset + sway * 0.4;
+    out.push({ side: -1, cy, anchor: PIPE_TOP, spread: p.spread,
+               endNear: cy - p.spread, endFar: cy + p.spread });
+  }
+  if (p.cvAt !== "top") {
+    const cy = bot - p.inset + sway * 0.4;
+    out.push({ side: 1, cy, anchor: bot, spread: p.spread,
+               endNear: cy + p.spread, endFar: cy - p.spread });
+  }
+  return { mx, sides: out, thick: p.thick };
+}
+
+// y of one stroke at t (0 = left edge, 1 = right edge). `flip` gives the
+// crossing partner. Both are straight lines, hence the symmetry.
+function chevY(sd, t, flip) {
+  const u = flip ? 1 - t : t;
+  // u = 0 at the top end, 1 at the bottom end (relative to this side).
+  return (sd.cy - sd.spread) + (sd.spread * 2) * u;
+}
+
+function chevronParts(s, p, forDrawing) {
+  const over = forDrawing ? PIPE_OVERDRAW : 0;
+  const { sides, thick } = chevronShape(s, p);
+  const sliceW = p.w / CHEV_SLICES;
+  const out = [];
+
+  for (const sd of sides) {
+    for (let i = 0; i < CHEV_SLICES; i++) {
+      const t = (i + 0.5) / CHEV_SLICES;
+      const x = p.x + i * sliceW;
+      const w = sliceW + 0.6;
+      for (const flip of [false, true]) {
+        const y = chevY(sd, t, flip);
+        let y0 = y - thick / 2, h = thick;
+        // Arms that have crossed their edge keep running past it, so the X is
+        // anchored and no cut end can be exposed by sway or tilt.
+        if (sd.side < 0 && y0 < sd.anchor) { h += y0 - (sd.anchor - over); y0 = sd.anchor - over; }
+        if (sd.side > 0 && y0 + h > sd.anchor) { h = (sd.anchor + over) - y0; }
+        if (h > 0) out.push({ x, y: y0, w, h });
+      }
+    }
+  }
+  return cutHoles(s, p, out.filter(r => r.h > 0));
+}
+
+function tunnelParts(s, p, forDrawing) {
+  const bot = H - GROUND_H;
+  const band = gapsOf(s, p)[0];
+  const wall = TUNNEL_WALL;
+  const lastBand = gapsOf(s, p);
+  const lo = band.lo, hi = lastBand[lastBand.length - 1].hi;
+
+  // `forDrawing` extends the legs past the deck and ground so a swayed or
+  // tilted tunnel never shows its cut ends. Collision passes nothing and gets
+  // the true bounds.
+  const over = forDrawing ? PIPE_OVERDRAW : 0;
+  const legTop = PIPE_TOP - over;
+  const legBot = bot + over;
+
+  let parts = [
+    // ∩ : left leg, right leg, and the bend across the bottom
+    { x: p.x,              y: legTop, w: wall, h: (lo - wall) - legTop },
+    { x: p.x + p.w - wall, y: legTop, w: wall, h: (lo - wall) - legTop },
+    { x: p.x,              y: lo - wall, w: p.w, h: wall },
+    // U : the bend across the top, then both legs down to the ground
+    { x: p.x,              y: hi,        w: p.w, h: wall },
+    { x: p.x,              y: hi + wall, w: wall, h: legBot - (hi + wall) },
+    { x: p.x + p.w - wall, y: hi + wall, w: wall, h: legBot - (hi + wall) }
+  ].filter(r => r.h > 0);
+
+  // Blast damage cuts each rectangle it overlaps, so a hole through the legs
+  // leaves them severed on both sides — || becomes :: — rather than filling
+  // the hollow middle the way a full-width band would.
+  return cutHoles(s, p, parts);
+}
+
+function gapsOf(s, p) {
+  const top = 0, bot = H - GROUND_H;
+  const sway = swayOf(s, p);
+
+  if (p.chevron) {
+    // The open route past an X: everything beyond the reach of its lowest (or
+    // highest) arm. Spikes and scoring use this band; the solid itself is the
+    // sliced X.
+    const spread = p.spread, inset = p.inset;
+    let lo = 0, hi = bot;
+    if (p.cvAt !== "bottom") {
+      const cy = Math.max(PIPE_TOP + inset * 0.5, PIPE_TOP + inset + sway * 0.4);
+      lo = cy + spread;
+    }
+    if (p.cvAt !== "top") {
+      const cy = Math.min(bot - inset * 0.5, bot - inset + sway * 0.4);
+      hi = cy - spread;
+    }
+    if (hi - lo < 40) { const m = (lo + hi) / 2; lo = m - 20; hi = m + 20; }
+    return [{ lo, hi }];
+  }
+
+  if (p.vee) {
+    // The tightest point of the taper — what the bird must actually fit
+    // through. Collision uses the sliced geometry; this band drives spikes,
+    // blast holes and everything else that reasons about "the gap".
+    const half = Math.min(p.gWide, p.gNarrow) / 2;
+    const c = Math.max(30 + half, Math.min(bot - 30 - half, p.base + sway));
+    // Holes are cut from the sliced solid, not merged here.
+    return [{ lo: c - half, hi: c + half }];
+  }
+
+  if (p.tunnel) {
+    // One wide opening: the corridor between the two bends. Blast holes are
+    // NOT merged here — a tunnel's solid comes from tunnelParts(), which cuts
+    // each leg individually so a hole severs both sides rather than opening a
+    // full-width band through the hollow middle.
+    const half = p.g / 2;
+    const tc = Math.max(30 + half, Math.min(bot - 30 - half, p.base + sway));
+    const inner = Math.max(20, half - TUNNEL_RIM);
+    return [{ lo: tc - inner, hi: tc + inner }];
+  }
+
+  if (p.split) {
+    const half = p.g / 2;
+    // The pair sways together, clamped so both openings stay on screen.
+    let cT = p.baseTop + sway, cB = p.baseBot + sway;
+    const lift = Math.min(0, (cT - half) - (top + 8)) + Math.max(0, (cB + half) - (bot - 8));
+    cT -= lift; cB -= lift;
+    return withHoles(p, [
+      { lo: cT - half, hi: cT + half },
+      { lo: cB - half, hi: cB + half }
+    ], bot, sway - lift);
+  }
+
+  let c = p.base + sway;
+  if (s.magnet) {
+    // Gap drifts gently toward the bird once the pipe is near.
+    const d = (p.x - BIRD_X) / 320;
+    if (d > 0 && d < 1) c += (s.y - c) * (1 - d) * 0.45;
+  }
+  const half = s.gap / 2;
+  c = Math.max(30 + half, Math.min(bot - 30 - half, c));
+  // c has already been swayed and clamped; holes follow the same displacement.
+  return withHoles(p, [{ lo: c - half, hi: c + half }], bot, c - p.base);
+}
+
+// Blast holes are merged into the band list, so a hole is a genuine opening the
+// bird can fly through — collision and rendering both derive from these bands
+// and need no special case for damage.
+function withHoles(p, bands, bot, off) {
+  off = off || 0;
+  if (!p.holes || !p.holes.length) return bands;
+  // Holes are stored in the pipe's own frame; `off` moves them back into world
+  // space so they ride along with a swaying pipe.
+  const shifted = p.holes.map(h => ({ lo: h.lo + off, hi: h.hi + off }));
+
+  // Every band, base or hole, is clamped to the playfield so the solid
+  // complement computed by collision and rendering is always well-formed.
+  let out = bands.concat(shifted).map(b => ({
+    lo: Math.max(0, Math.min(bot, b.lo)),
+    hi: Math.max(0, Math.min(bot, b.hi))
+  }));
+  out = out.filter(b => b.hi > b.lo).sort((a, b) => a.lo - b.lo);
+  if (!out.length) return bands;
+  // Merge overlapping/touching bands so the complement stays well-formed.
+  const merged = [out[0]];
+  for (let i = 1; i < out.length; i++) {
+    const last = merged[merged.length - 1];
+    if (out[i].lo <= last.hi + 0.5) last.hi = Math.max(last.hi, out[i].hi);
+    else merged.push(out[i]);
+  }
+  return merged;
+}
+
+// ============================================================
+//  SKY LAYER — Greek pillars above the cloud deck
+//  Pillars hang from the ceiling or rise from the cloud tops, leaving a gap to
+//  thread. They share the pipe scroll speed so both layers stay in rhythm.
+// ============================================================
+function spawnPillar(s, easy) {
+  const gap = Math.max(120, s.gap * 1.05);
+  const margin = 40;
+  const minC = SKY_TOP + margin + gap / 2;
+  // The gap must clear the top of the (now much thicker) cloud deck.
+  const maxC = (CLOUD_Y - CLOUD_TH * 0.5) - margin - gap / 2;
+
+  let c, style;
+  if (easy) {
+    // The first pillar of a visit must be clearable from where the bird
+    // actually arrives — just above the cloud deck. A hanging column or a gap
+    // high in the sky is unreachable in the time available, so force a short
+    // bottom column whose opening sits right at the entry altitude.
+    // Place the opening so the arrival altitude sits just inside its lower
+    // half: reachable with no climb, while still leaving a real (short) column
+    // rising out of the cloud below it rather than an empty slot.
+    const entryY = CLOUD_Y - 26;
+    const col = 46;                       // visible column height below the gap
+    c = Math.min(maxC, (CLOUD_Y + CLOUD_TH * 0.22) - col - gap / 2);
+    // Never place it so high that the entry altitude falls outside the gap.
+    c = Math.max(c, entryY - gap / 2 + BIRD_R + 8);
+    style = "bottom";
+  } else {
+    c = minC + rnd() * Math.max(10, maxC - minC);
+    style = rnd() < 0.34 ? "both" : (rnd() < 0.5 ? "top" : "bottom");
+  }
+
+  s.pillars.push({
+    x: s.nextPillarX, c, gap,
+    // Rising columns end INSIDE the cloud deck — deep enough that the haze
+    // hides their feet, but never poking out the bottom into the pipe zone.
+    base: CLOUD_Y + CLOUD_TH * 0.22,
+    w: 62,
+    style,
+    // Movement: pillars wait, shudder as a warning, then lurch up or down.
+    // The first pillar of a visit never moves, so arrival is always fair.
+    staticPillar: !!easy,
+    moveT: 0.6 + rnd() * 1.2,
+    moving: 0,          // >0 while mid-lurch
+    dir: 0,
+    shift: 0,           // current offset applied to c
+    from: 0, to: 0,
+    passed: false
+  });
+  s.nextPillarX += s.spacing * 1.15;
+}
+
+// The natural opening of a pillar, before any blast damage.
+// Advances one pillar's lurch cycle: countdown -> telegraph -> move -> repeat.
+function stepPillar(s, p, d) {
+  // `static` marks the guaranteed-fair first pillar of a visit. This used to be
+  // encoded as moveT < 0, which silently also matched the normal post-commit
+  // state (moveT dips just below zero), so every pillar bailed out here before
+  // its move could animate.
+  if (p.staticPillar) return;
+
+  if (p.moving > 0) {
+    p.moving -= d;
+    const k = 1 - Math.max(0, p.moving) / PIL_MOVE;
+    // Ease-out so it snaps away and settles rather than sliding linearly.
+    const e = 1 - Math.pow(1 - Math.min(1, k), 2);
+    p.shift = p.from + (p.to - p.from) * e;
+    if (p.moving <= 0) {
+      p.shift = p.to;
+      p.moving = 0;
+      p.dir = 0;
+      p.moveT = 0.9 + rnd() * 1.2;
+    }
+    return;
+  }
+
+  p.moveT -= d;
+
+  // As soon as the telegraph starts, lock in which way this one will go, so the
+  // arrow shown during the shudder matches the actual move.
+  if (p.moveT <= PIL_TELL && !p.dir) {
+    const gapC = p.c + p.shift;
+    const hi = SKY_TOP + 60 + p.gap / 2;                       // highest centre
+    const lo = (CLOUD_Y - CLOUD_TH * 0.5) - 20 - p.gap / 2;    // lowest centre
+    const canUp = gapC - PIL_DIST > hi;
+    const canDown = gapC + PIL_DIST < lo;
+    if (!canUp && !canDown) { p.moveT = 0.8; return; }
+    p.dir = (canUp && canDown) ? (rnd() < 0.5 ? -1 : 1) : (canUp ? -1 : 1);
+  }
+
+  if (p.moveT <= 0) {
+    p.moveT = 0;
+    p.from = p.shift;
+    p.to = p.shift + p.dir * PIL_DIST;
+    p.moving = PIL_MOVE;
+  }
+}
+
+// How far into its warning shudder a pillar is: 0 when idle, 1 the instant
+// before it lurches. Drives both the visual shake and its colour.
+// How far into its lunge warning the pipe field is: 0 when idle, 1 the instant
+// before the surge. Mirrors pillarTell so both hazards telegraph the same way.
+function lurchTell(s) {
+  if (!s.lurchWarn) return 0;
+  return 1 - s.lurchWarn / LURCH_TELL;
+}
+
+function pillarTell(p) {
+  if (p.staticPillar || p.moving > 0) return 0;
+  if (p.moveT > PIL_TELL) return 0;
+  return 1 - p.moveT / PIL_TELL;
+}
+
+function pillarGap(p) {
+  const half = p.gap / 2;
+  const c = p.c + (p.shift || 0);
+  return { lo: c - half, hi: c + half };
+}
+
+// Open bands of a pillar, with bazooka holes merged in — same model the pipes
+// use, so a blasted pillar is genuinely flyable through.
+function pillarBands(s, p) {
+  const g = pillarGap(p);
+  if (!p.holes || !p.holes.length) return [g];
+  return withHoles(p, [g], p.base);
+}
+
+// The solid rectangles of a pillar: whichever columns it has, minus any blast
+// holes. Shared by collision and rendering so the two can never disagree.
+function pillarSolids(s, p) {
+  const gap = pillarGap(p);
+  const segs = [];
+  if (p.style !== "bottom") segs.push({ lo: PILLAR_TOP, hi: gap.lo });
+  if (p.style !== "top")    segs.push({ lo: gap.hi, hi: p.base });
+
+  if (!p.holes || !p.holes.length) return segs.filter(sg => sg.hi > sg.lo);
+
+  // Subtract each hole from every segment.
+  let out = segs;
+  for (const h of p.holes) {
+    const next = [];
+    for (const sg of out) {
+      if (h.hi <= sg.lo || h.lo >= sg.hi) { next.push(sg); continue; }
+      if (h.lo > sg.lo) next.push({ lo: sg.lo, hi: h.lo });
+      if (h.hi < sg.hi) next.push({ lo: h.hi, hi: sg.hi });
+    }
+    out = next;
+  }
+  return out.filter(sg => sg.hi - sg.lo > 0.5);
+}
+
+function hitsPillar(s, r) {
+  for (const p of s.pillars) {
+    if (p.x + p.w < BIRD_X - r || p.x > BIRD_X + r) continue;
+    for (const sg of pillarSolids(s, p)) {
+      if (hitsRect(BIRD_X, s.y, r, p.x, sg.lo, p.w, sg.hi - sg.lo))
+        return { kind: "block" };
+    }
+  }
+  return null;
+}
+
+function updatePillars(s, d) {
+  // Pillars already in play keep scrolling even after the bird drops back below
+  // the clouds, so bobbing across the deck cannot erase one that was about to
+  // be hit. Only the spawning of new pillars pauses while the bird is away.
+  for (const p of s.pillars) {
+    p.x -= s.speed * d;
+    stepPillar(s, p, d);
+  }
+  s.nextPillarX -= s.speed * d;
+  s.pillars = s.pillars.filter(p => p.x + p.w > -40);
+
+  if (!s.inSky) return;
+
+  // First arrival with nothing up here: build a field that already spans the
+  // screen, otherwise the sky reads as empty for the ~0.85s a fresh pillar
+  // needs to scroll in — most of the camera sweep.
+  if (!s.pillars.length && s.nextPillarX < BIRD_X + 190) s.nextPillarX = BIRD_X + 190;
+  // The first pillar the bird meets on a visit is always an easy one.
+  while (s.nextPillarX < W + 200) spawnPillar(s, !s.pillars.length);
+
+  // Pillars score the same as pipes while the bird is up in the sky.
+  if (s.y < CLOUD_Y) {
+    for (const p of s.pillars) {
+      if (!p.passed && p.x + p.w < BIRD_X - s.radius) {
+        p.passed = true;
+        s.pillarsPassed++;
+        s.pipesPassed++;
+        s.streak++;
+        let pts = 1 * s.scoreMult;
+        if (s.combo && s.streak % 3 === 0) pts += 1 * s.scoreMult;
+        s.score += pts;
+        burst(BIRD_X + 40, s.y, 6, "#fde68a");
+      }
+    }
+  }
+}
+
+// ============================================================
+//  BAZOOKA  (blessing)
+//  Fires forward on a flap cadence. The rocket blows a real opening in the
+//  first pipe it meets — merged into that pipe's band list, so the bird can
+//  fly straight through it — or destroys a rival bird outright.
+// ============================================================
+const BLAST_R = 46;          // radius of the hole carved in a pipe
+const CRACK_R = 108;         // pipes within this of the blast show damage
+
+function fireRocket(s) {
+  const n = Math.max(1, s.rocketCount || 1);
+  // A volley spreads vertically so the rockets carve separate holes instead of
+  // stacking into one. A single rocket still flies dead level.
+  const spread = 34;
+  for (let i = 0; i < n; i++) {
+    const off = n === 1 ? 0 : (i - (n - 1) / 2) * spread;
+    s.rockets.push({
+      x: BIRD_X + 18, y: s.y + off, vy: 0, life: 2.4, trail: [],
+      // Slight vertical drift so the spread widens as the volley flies.
+      drift: n === 1 ? 0 : off * 0.55
+    });
+  }
+  s.shake = Math.max(s.shake, 5 + n);
+  burst(BIRD_X + 14, s.y, 6 + n * 3, "#fbbf24");
+}
+
+function explode(s, x, y) {
+  s.shake = Math.max(s.shake, 12);
+  s.flash = Math.max(s.flash, 0.4);
+  burst(x, y, 30, "#fb923c");
+  burst(x, y, 18, "#fde68a");
+  burst(x, y, 10, "#7c2d12");
+
+  const bot = H - GROUND_H;
+  for (const p of s.pipes) {
+    const dx = Math.max(p.x - x, 0, x - (p.x + p.w));
+    if (dx > CRACK_R) continue;
+
+    // Direct hit: carve an opening scaled by how centred the blast was.
+    if (dx < p.w * 0.5 + 10) {
+      const rr = Math.sqrt(Math.max(0, BLAST_R * BLAST_R - dx * dx));
+      if (rr > 6) {
+        p.holes = p.holes || [];
+        // Recorded in the pipe's own frame, so a swaying pipe carries its
+        // damage rather than leaving it floating in mid-air.
+        const off = p.split ? swayOf(s, p) : (gapCentreOf(s, p) - p.base);
+        p.holes.push({ lo: y - rr - off, hi: y + rr - off });
+        s.holes++;
+      }
+    }
+
+    // Nearby pipes are scarred but still solid.
+    p.cracks = p.cracks || [];
+    if (p.cracks.length < 10) {
+      const n = dx < CRACK_R * 0.5 ? 3 : 2;
+      const cOff = p.split ? swayOf(s, p) : (gapCentreOf(s, p) - p.base);
+      for (let i = 0; i < n; i++) {
+        p.cracks.push({
+          y: y + (rnd() * 2 - 1) * CRACK_R * 0.7 - cOff,
+          off: (rnd() * 2 - 1) * (p.w * 0.35),
+          len: 8 + rnd() * 16,
+          ang: (rnd() * 2 - 1) * 1.2,
+          seed: rnd()
+        });
+      }
+    }
+  }
+
+  // Pillars take the same damage as pipes, so the bazooka works up in the sky.
+  for (const p of s.pillars) {
+    const dx = Math.max(p.x - x, 0, x - (p.x + p.w));
+    if (dx > CRACK_R) continue;
+
+    if (dx < p.w * 0.5 + 10) {
+      const rr = Math.sqrt(Math.max(0, BLAST_R * BLAST_R - dx * dx));
+      // Only counts if the blast actually landed on solid stone.
+      const onStone = pillarSolids(s, p).some(sg => y > sg.lo - rr && y < sg.hi + rr);
+      if (rr > 6 && onStone) {
+        p.holes = p.holes || [];
+        p.holes.push({ lo: y - rr, hi: y + rr });
+        s.holes++;
+      }
+    }
+
+    p.cracks = p.cracks || [];
+    if (p.cracks.length < 10) {
+      const n = dx < CRACK_R * 0.5 ? 3 : 2;
+      for (let i = 0; i < n; i++) {
+        p.cracks.push({
+          y: y + (rnd() * 2 - 1) * CRACK_R * 0.7,
+          off: (rnd() * 2 - 1) * (p.w * 0.35),
+          len: 8 + rnd() * 16,
+          ang: (rnd() * 2 - 1) * 1.2,
+          seed: rnd()
+        });
+      }
+    }
+  }
+
+  // Rival birds inside the blast are destroyed.
+  const before = s.foes.length;
+  s.foes = s.foes.filter(f => {
+    const d = Math.hypot(f.x - x, f.y - y);
+    if (d < BLAST_R + BIRD_R) { burst(f.x, f.y, 14, f.pal.lo); return false; }
+    return true;
+  });
+  s.kills += before - s.foes.length;
+}
+
+function updateRockets(s, d, dt) {
+  if (!s.rockets.length) return;
+  const bot = H - GROUND_H;
+
+  for (const rk of s.rockets) {
+    rk.trail.push({ x: rk.x, y: rk.y, life: 0.32 });
+    if (rk.trail.length > 14) rk.trail.shift();
+    for (const t of rk.trail) t.life -= dt;
+
+    // Rockets outrun the scroll so they visibly close on the pipes.
+    rk.x += (s.speed * 2.6 + 210) * d;
+    if (rk.drift) rk.y += rk.drift * d;
+    rk.life -= d;
+
+    let hit = null;
+
+    // A rival bird in the way detonates it early.
+    for (const f of s.foes) {
+      if (Math.hypot(f.x - rk.x, f.y - rk.y) < BIRD_R + 8) { hit = { x: rk.x, y: rk.y }; break; }
+    }
+
+    // A pillar up in the sky also stops it — but only where stone remains, so a
+    // rocket flies cleanly through a hole a previous one already blew.
+    if (!hit) {
+      for (const p of s.pillars) {
+        if (rk.x < p.x || rk.x > p.x + p.w) continue;
+        for (const sg of pillarSolids(s, p)) {
+          if (rk.y > sg.lo && rk.y < sg.hi) { hit = { x: rk.x, y: rk.y }; break; }
+        }
+        if (hit) break;
+      }
+    }
+
+    // Otherwise the first solid pipe section it enters.
+    if (!hit) {
+      for (const p of s.pipes) {
+        if (rk.x < p.x || rk.x > p.x + p.w) continue;
+        const bands = gapsOf(s, p);
+        let solid = true;
+        for (const b of bands) if (rk.y > b.lo && rk.y < b.hi) { solid = false; break; }
+        if (solid) { hit = { x: rk.x, y: rk.y }; break; }
+      }
+    }
+
+    if (!hit && (rk.y < SKY_TOP || rk.y > bot))
+      hit = { x: rk.x, y: Math.max(SKY_TOP, Math.min(bot, rk.y)) };
+
+    if (hit) { explode(s, hit.x, hit.y); rk.dead = true; }
+    else if (rk.x > W + 60 || rk.life <= 0) rk.dead = true;
+  }
+
+  s.rockets = s.rockets.filter(rk => !rk.dead);
+}
+
+// ============================================================
+//  ONCOMING FLOCK  (curse)
+//  Rival birds fly right-to-left at twice the pipe speed. They ignore pipes
+//  entirely — they are an independent hazard layered over the level — but
+//  they flap on their own cycle so they bob through the playfield.
+// ============================================================
+function spawnFoe(s) {
+  const pal = FOE_PALS[(rnd() * FOE_PALS.length) | 0];
+  const margin = 46;
+  const bot = H - GROUND_H;
+  s.foes.push({
+    x: W + 30,
+    y: margin + rnd() * (bot - margin * 2),
+    vy: 0,
+    pal,
+    // Each foe flaps on its own rhythm, so the flock never moves in lockstep.
+    flapEvery: 0.55 + rnd() * 0.5,
+    flapT: rnd() * 0.5,
+    flapPower: -230 - rnd() * 90,
+    flapAnim: 0,
+    rot: 0
+  });
+}
+
+function updateFoes(s, d, dt) {
+  if (s.flock <= 0) return;
+  const bot = H - GROUND_H;
+  const margin = 30;
+
+  // More stacks -> denser flock.
+  s.foeTimer -= d;
+  if (s.foeTimer <= 0) {
+    spawnFoe(s);
+    s.foeTimer = Math.max(0.5, (1.9 - s.flock * 0.42) * (0.7 + rnd() * 0.7));
+  }
+
+  for (const f of s.foes) {
+    // Twice the pipe speed, and the pipes are already moving toward the bird,
+    // so closing speed relative to the player is 2x the scroll rate.
+    f.x -= s.speed * 2 * d;
+
+    // Their own flap cycle: periodic impulse against normal gravity.
+    f.flapT += d;
+    if (f.flapT >= f.flapEvery) {
+      f.flapT = 0;
+      f.vy = f.flapPower;
+      f.flapAnim = 1;
+    }
+    f.vy += BASE.gravity * 0.55 * d;
+    f.y += f.vy * d;
+
+    // Keep them inside the playfield rather than letting them sink away.
+    if (f.y < margin)     { f.y = margin;     f.vy = Math.max(f.vy, 40); }
+    if (f.y > bot - margin) { f.y = bot - margin; f.vy = f.flapPower; f.flapAnim = 1; }
+
+    f.flapAnim = Math.max(0, f.flapAnim - dt * 4);
+    const target = Math.max(-0.5, Math.min(0.8, f.vy / 520));
+    f.rot += (target - f.rot) * Math.min(1, d * 8);
+  }
+
+  s.foes = s.foes.filter(f => f.x > -40);
+}
+
+// ============================================================
+//  INPUT
+// ============================================================
+function flap() {
+  if (mode !== "play") return;
+  const s = S;
+  // Every flap is logged by frame index; that plus the seed is the whole run.
+  if (rec && !replay) rec.flaps.push(rec.frame);
+  // Out of air: the wings simply do not answer until the bird is back below
+  // the clouds. Sinking is the only way out.
+  if (s.o2Out && s.inSky) { s.flapAnim = Math.max(s.flapAnim, 0.35); return; }
+  s.flapCount++;
+
+  // Twitchy wings: randomize flap strength.
+  const j = s.jitter ? (1 + (rnd() * 2 - 1) * s.jitter) : 1;
+  // Floor on flap power: a single flap must always lift the bird at least a
+  // quarter of a gap, or gravity curses could make the bird physically unable to
+  // climb. Scales with gravity and gap so it stays correct as those change.
+  const need = -Math.sqrt(2 * s.gravity * Math.max(26, s.gap * 0.26));
+  let power = Math.min(s.flap, need);
+
+  // The air thins with altitude: flap power fades to nothing at the ceiling,
+  // so the top of the sky can be approached but never flown past.
+  // Linear-ish falloff: still climbable most of the way up, hitting exactly
+  // zero at the ceiling so the very top can be touched but never passed.
+  power *= Math.pow(1 - skyT(s.y), 1.25);
+
+  s.vy = power * j * s.gravDir;
+  s.flapAnim = 1;
+
+  // Unstable gravity curse. Flipping while already falling fast used to carry
+  // all that speed into the new direction, which is unreadable; damp it so the
+  // flip is a change of direction, not a slingshot.
+  if (s.invertEvery && s.flapCount % s.invertEvery === 0) {
+    s.gravDir *= -1;
+    s.vy *= 0.35;
+    s.flash = 0.35;
+    burst(BIRD_X, s.y, 10, "#a78bfa");
+  }
+  // Hungry pipes curse: every N flaps the field lunges toward the bird.
+  // The distance is QUEUED here and paid out smoothly in update(), so the
+  // lunge is something you can see coming and fly around.
+  if (s.lurchEvery && s.flapCount % s.lurchEvery === 0) {
+    // Clamped so a lunge can never carry a pipe clean past the bird.
+    const d = Math.min(s.lurchDist, s.spacing * 0.7);
+    // Armed, not fired: the pipes shudder for LURCH_TELL seconds first, so the
+    // lunge is announced on the pipes themselves before anything moves.
+    s.lurchPend += d;
+    s.lurchWarn = LURCH_TELL;
+    burst(BIRD_X + 30, s.y, 8, "#fb923c");
+  }
+
+  // Bazooka: fires on its own flap cadence (every 10, or 5 once upgraded).
+  if (s.bazooka && s.flapCount % s.bazooka === 0) fireRocket(s);
+
+  burst(BIRD_X - 8, s.y + 6, 4, "#cfd8ec");
+}
+
+function press() {
+  if (replay) return;                       // replays ignore input
+  if (mode === "start")      { startGame(); }
+  // Queue the flap for the next physics step rather than applying it now, so
+  // input lands on a fixed step and the run stays reproducible.
+  else if (mode === "play")  { flapQueue = Math.min(flapQueue + 1, 3); }
+  else if (mode === "over")  { if (canRestart()) startGame(); }
+  else if (mode === "pause") { togglePause(); }
+}
+
+cv.addEventListener("mousedown", e => { e.preventDefault(); press(); });
+cv.addEventListener("touchstart", e => { e.preventDefault(); press(); }, {passive:false});
+panels.pause.addEventListener("mousedown", () => togglePause());
+
+window.addEventListener("keydown", e => {
+  if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
+    e.preventDefault(); press();
+  } else if (e.code === "Escape") {
+    e.preventDefault();
+    if (replay) { exitReplay(); }
+    else if (mode === "scores") { mode = "start"; showPanel("start"); }
+    else togglePause();
+  } else if (e.code === "KeyP") {
+    e.preventDefault(); togglePause();
+  } else if (e.code === "KeyR") {
+    if (mode === "play") startGame();
+    else if (mode === "over" && canRestart()) startGame();
+  } else if (mode === "upgrade" && /^Digit[123]$/.test(e.code)) {
+    const i = +e.code.slice(5) - 1;
+    const el = document.querySelectorAll("#cards .card")[i];
+    if (el) el.click();
+  }
+});
+
+function togglePause() {
+  if (mode === "play")       { mode = "pause"; showPanel("pause"); }
+  else if (mode === "pause") { mode = "play";  hidePanels(); last = performance.now(); }
+}
+
+// ============================================================
+//  GAME FLOW
+// ============================================================
+// ---------------------------------------------------------------------------
+// RECORDING / REPLAY
+// A run is stored as its seed, the fixed timestep, the frame indices on which
+// the player flapped, and the upgrade choices taken. Replaying feeds those
+// back through the identical update path, so the run reproduces exactly.
+// ---------------------------------------------------------------------------
+const STORE_KEY = "flappy.scores.v1";
+const NAME_KEY  = "flappy.name.v1";
+
+// The global board lives behind a Pages Function. Opening the file directly
+// (file://) has no server, so the API is skipped entirely and the game runs
+// local-only — same build, both environments.
+const HAS_API = location.protocol === "http:" || location.protocol === "https:";
+let globalScores = null;      // null = not fetched yet
+let globalState = HAS_API ? "idle" : "offline";
+
+function playerName() {
+  try { return localStorage.getItem(NAME_KEY) || ""; } catch (e) { return ""; }
+}
+function setPlayerName(n) {
+  try { localStorage.setItem(NAME_KEY, n); } catch (e) {}
+}
+
+async function fetchGlobal() {
+  if (!HAS_API) { globalState = "offline"; return; }
+  globalState = "loading";
+  try {
+    const r = await fetch("/api/scores", { headers: { accept: "application/json" } });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    globalScores = d.scores || [];
+    globalState = d.unconfigured ? "unconfigured" : "ok";
+  } catch (e) {
+    globalState = "error";
+  }
+}
+
+async function submitGlobal(entry) {
+  if (!HAS_API) return;
+  try {
+    await fetch("/api/scores", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(entry)
+    });
+  } catch (e) { /* offline or blocked; the local score is already saved */ }
+}
+// The simulation always advances in these fixed increments, live and replayed
+// alike. MAX_STEPS caps how much catch-up a single frame may do.
+const PHYS_DT   = 1 / 60;
+const MAX_STEPS = 5;
+
+let rec = null;                    // recording of the run in progress
+let replay = null;                 // replay being played back
+
+function loadScores() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveScores(list) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(list.slice(0, 20))); }
+  catch (e) { /* storage unavailable; scores just will not persist */ }
+}
+
+function recordRun(S) {
+  const list = loadScores();
+  list.push({
+    score: S.score,
+    pipes: S.pipesPassed,
+    date: Date.now(),
+    seed: rec.seed,
+    flaps: rec.flaps,
+    picks: rec.picks,
+    frames: rec.frame,
+    taken: S.taken.map(t => t.replace(/<[^>]*>/g, ""))
+  });
+  list.sort((a, b) => b.score - a.score);
+  saveScores(list);
+
+  // Fire-and-forget to the global board. Local storage already has the run, so
+  // a failed submit costs nothing.
+  submitGlobal({
+    name: playerName(),
+    score: S.score,
+    pipes: S.pipesPassed,
+    seed: rec.seed,
+    flaps: rec.flaps,
+    picks: rec.picks
+  });
+}
+
+function startGame(replayData) {
+  replay = replayData || null;
+  if (replay) { replay.at = 0; replay.pickAt = 0; }
+  const seed = replay ? replay.seed : ((Math.random() * 0x7FFFFFFF) | 0) || 1;
+  seedRun(seed);
+
+  S = newRun();
+  rec = { seed, flaps: [], picks: [], frame: 0 };
+  for (let i = 0; i < 4; i++) spawnPipe(S);
+  mode = "play";
+  hidePanels();
+  last = performance.now();
+}
+
+function pick(arr, n) {
+  const pool = arr.slice();
+  const out = [];
+  while (out.length < n && pool.length) {
+    out.push(pool.splice((rnd() * pool.length) | 0, 1)[0]);
+  }
+  return out;
+}
+
+// Blessing id -> curse ids that would simply undo it. Pairing these produces a
+// card that costs a pick slot and changes nothing, so they are never offered
+// together.
+const OPPOSED = {
+  slow:   ["fast"],            // slow motion  vs haste
+  small:  ["big"],             // shrink       vs bloat
+  gap:    ["narrow"],          // wide gaps    vs narrow gaps
+  float:  ["heavy"],           // feather fall vs heavy bones
+  light:  ["heave"],           // light touch  vs wild wings
+  magnet: ["wobble"],          // magnet pulls the gap, wobble shoves it away
+  bouncy: ["spikes"],          // spiked rims make the bounce face lethal
+  spread: ["tight"]            // open road   vs crowded pipes
+};
+
+function opposes(b, c) {
+  const list = OPPOSED[b.id];
+  return !!list && list.indexOf(c.id) !== -1;
+}
+
+// Pair each blessing with a curse that does not cancel it. Curses are assigned
+// greedily; if a slot has no legal curse left it swaps with an earlier slot
+// whose curse is legal here, which keeps all three cards distinct.
+function pairCurses(bless, pool) {
+  const avail = pool.slice();
+  const out = [];
+  for (let i = 0; i < bless.length; i++) {
+    let idx = avail.findIndex(c => !opposes(bless[i], c));
+    if (idx === -1) {
+      // No legal curse remains — take one already assigned to an earlier
+      // blessing that can instead accept one of ours.
+      let swapped = false;
+      for (let j = 0; j < out.length && !swapped; j++) {
+        for (let k = 0; k < avail.length; k++) {
+          if (!opposes(bless[i], out[j]) && !opposes(bless[j], avail[k])) {
+            out.push(out[j]);
+            out[j] = avail.splice(k, 1)[0];
+            swapped = true;
+            break;
+          }
+        }
+      }
+      if (swapped) continue;
+      idx = 0;   // pool exhausted of legal options; accept the overlap
+    }
+    out.push(avail.splice(idx, 1)[0]);
+  }
+  return out;
+}
+
+function openUpgrade() {
+  mode = "upgrade";
+  const s = S;
+  const bless  = pick(BLESSINGS, 3);
+  // Draw from a shuffled copy of the whole curse pool so the pairing step has
+  // room to avoid conflicts rather than being stuck with three fixed curses.
+  const curses = pairCurses(bless, pick(CURSES, CURSES.length));
+
+  $("upSub").textContent =
+    `Pipe ${s.pipesPassed} · every gift has a price`;
+
+  const box = $("cards");
+  box.innerHTML = "";
+  bless.forEach((b, i) => {
+    const c = curses[i];
+    const el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      `<div class="icon">${b.icon}</div>
+       <div class="good"><span class="tag">BLESSING</span>
+         <div class="name">${b.name}</div>
+         <div class="desc">${b.desc}</div></div>
+       <div class="bad"><span class="tag">CURSE</span>
+         <div class="name">${c.name}</div>
+         <div class="desc">${c.desc}</div></div>`;
+    el.addEventListener("click", () => {
+      if (rec && !replay) rec.picks.push(i);
+      b.apply(s); c.apply(s);
+      s.taken.push(`${b.name} <span style="color:#f87171">/ ${c.name}</span>`);
+      s.nextUpgradeAt += 5;
+      mode = "play";
+      hidePanels();
+      last = performance.now();
+    });
+    box.appendChild(el);
+  });
+  if (replay) {
+    // Replays take the same card the player took, without stopping.
+    const idx = replay.picks[replay.pickAt++] || 0;
+    const cards = document.querySelectorAll("#cards .card");
+    if (cards[idx]) { cards[idx].click(); return; }
+  }
+  showPanel("up");
+}
+
+// Inputs are ignored for this long after a death, so a flap pressed at the
+// moment of the crash cannot skip the score screen.
+const RESTART_LOCK = 1.0;
+let overAt = 0;
+
+function canRestart() {
+  return (performance.now() - overAt) / 1000 >= RESTART_LOCK;
+}
+
+function gameOver() {
+  mode = "over";
+  overAt = performance.now();
+  if (replay) { exitReplay(); return; }
+  if (rec && S.pipesPassed > 0) recordRun(S);
+  const btn = $("againBtn");
+  btn.disabled = true;
+  btn.style.opacity = ".45";
+  btn.style.cursor = "default";
+  $("finalScore").textContent = S.score;
+  $("finalSub").textContent =
+    `${S.pipesPassed} pipe${S.pipesPassed === 1 ? "" : "s"} · ${S.taken.length} bargain${S.taken.length === 1 ? "" : "s"}` +
+    (S.bounces ? ` · ${S.bounces} bounce${S.bounces === 1 ? "" : "s"}` : "") +
+    (S.holes ? ` · ${S.holes} pipe${S.holes === 1 ? "" : "s"} breached` : "") +
+    (S.kills ? ` · ${S.kills} shot down` : "") +
+    (S.incomeEarned ? ` · ${S.incomeEarned} earned idle` : "");
+  $("runlist").innerHTML = S.taken.length
+    ? "<b>YOUR BARGAINS</b><br>" + S.taken.map((t,i) => `${i+1}. ${t}`).join("<br>")
+    : "";
+  showPanel("over");
+}
+
+function fmtAgo(ts) {
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + "m ago";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + "h ago";
+  return Math.floor(h / 24) + "d ago";
+}
+
+let scoresTab = "mine";
+
+function rowFor(r, i, showName) {
+  const el = document.createElement("div");
+  el.className = "srow";
+  const bargains = (r.taken || r.picks || []).length;
+  el.innerHTML =
+    `<span class="srank">${i + 1}</span>` +
+    `<span class="sscore">${r.score}</span>` +
+    (showName ? `<span class="sname">${escapeHtml(r.name || "anon")}</span>` : "") +
+    `<span class="smeta">${r.pipes} pipe${r.pipes === 1 ? "" : "s"} · ` +
+    `${bargains} bargain${bargains === 1 ? "" : "s"} · ${fmtAgo(r.date)}</span>` +
+    (r.flaps && r.flaps.length ? `<span class="splay">▶ WATCH</span>` : "");
+  if (r.flaps && r.flaps.length) {
+    el.addEventListener("click", () => {
+      $("replayTag").classList.add("show");
+      startGame({ seed: r.seed, flaps: r.flaps, picks: r.picks || [] });
+    });
+  }
+  return el;
+}
+
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function renderScores() {
+  const box = $("scoreList");
+  box.innerHTML = "";
+  $("tabMine").classList.toggle("on", scoresTab === "mine");
+  $("tabGlobal").classList.toggle("on", scoresTab === "global");
+
+  if (scoresTab === "mine") {
+    $("scoresTitle").textContent = "YOUR BEST RUNS";
+    $("scoresSub").textContent = "Click a run to watch the replay";
+    const list = loadScores();
+    if (!list.length) {
+      box.innerHTML = '<div class="sub" style="margin:0">No runs yet — go fly.</div>';
+    }
+    list.forEach((r, i) => box.appendChild(rowFor(r, i, false)));
+    return;
+  }
+
+  $("scoresTitle").textContent = "GLOBAL LEADERBOARD";
+  const msg = t => { box.innerHTML = `<div class="sub" style="margin:0">${t}</div>`; };
+
+  if (globalState === "offline") {
+    $("scoresSub").textContent = "";
+    msg("Global scores need the hosted version.<br>Running from a local file.");
+  } else if (globalState === "loading") {
+    $("scoresSub").textContent = "";
+    msg("Loading…");
+  } else if (globalState === "error") {
+    $("scoresSub").textContent = "";
+    msg("Could not reach the leaderboard.<br>Your runs are still saved locally.");
+  } else if (globalState === "unconfigured") {
+    $("scoresSub").textContent = "";
+    msg("Leaderboard storage is not set up yet.<br>See README: bind a KV namespace.");
+  } else if (!globalScores || !globalScores.length) {
+    $("scoresSub").textContent = "";
+    msg("Nobody has posted a score yet.<br>Be the first.");
+  } else {
+    $("scoresSub").textContent = "Click a run to watch the replay";
+    globalScores.forEach((r, i) => box.appendChild(rowFor(r, i, true)));
+  }
+}
+
+function openScores() {
+  mode = "scores";
+  showPanel("scores");
+  const inp = $("nameIn");
+  if (inp) inp.value = playerName();
+  renderScores();
+  // Refresh the global board each time the panel opens.
+  if (HAS_API && scoresTab === "global") {
+    fetchGlobal().then(renderScores);
+  }
+}
+
+function exitReplay() {
+  replay = null;
+  $("replayTag").classList.remove("show");
+  openScores();
+}
+
+$("scoresBtn").addEventListener("click", e => { e.stopPropagation(); openScores(); });
+$("overScores").addEventListener("click", e => { e.stopPropagation(); openScores(); });
+$("tabMine").addEventListener("click", e => {
+  e.stopPropagation(); scoresTab = "mine"; renderScores();
+});
+$("tabGlobal").addEventListener("click", e => {
+  e.stopPropagation();
+  scoresTab = "global";
+  renderScores();
+  if (HAS_API && globalState !== "loading") fetchGlobal().then(renderScores);
+});
+$("nameIn").addEventListener("input", e => {
+  setPlayerName(e.target.value.replace(/[^\w \-]/g, "").slice(0, 14));
+});
+$("nameIn").addEventListener("keydown", e => e.stopPropagation());
+
+$("scoresBack").addEventListener("click", e => {
+  e.stopPropagation();
+  mode = "start";
+  showPanel("start");
+});
+
+$("startBtn").addEventListener("click", e => { e.stopPropagation(); startGame(); });
+$("againBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  if (canRestart()) startGame();
+});
+
+// ============================================================
+//  PARTICLES
+// ============================================================
+function burst(x, y, n, color) {
+  for (let i = 0; i < n; i++) {
+    S.particles.push({
+      x, y,
+      vx: (rnd() * 2 - 1) * 140,
+      vy: (rnd() * 2 - 1) * 140,
+      life: 0.4 + rnd() * 0.4, max: 0.8,
+      r: 1.5 + rnd() * 2.5, color
+    });
+  }
+}
+
+// ============================================================
+//  COLLISION  — circle vs the two pipe rectangles
+// ============================================================
+function hitsRect(cx, cy, r, rx, ry, rw, rh) {
+  const nx = Math.max(rx, Math.min(cx, rx + rw));
+  const ny = Math.max(ry, Math.min(cy, ry + rh));
+  const dx = cx - nx, dy = cy - ny;
+  return dx*dx + dy*dy < r*r;
+}
+
+// Returns null for no contact, otherwise a descriptor of the surface hit.
+// kind "floor" means a downward-facing impact (ground, or the top face of a
+// lower pipe segment) — the only kind BOUNCY BEAK can deflect off.
+function collides(s) {
+  const r = s.radius;
+  const bot = H - GROUND_H;
+  // "Floor" is whichever bound gravity pulls toward, so the mechanic still
+  // works when UNSTABLE GRAVITY has the world inverted.
+  // The sky is open above the pipes, so only the very top of it is solid.
+  if (s.y - r < SKY_TOP) return { kind: "ceiling" };
+  if (s.y + r > bot) return s.gravDir > 0 ? { kind: "floor", surfaceY: bot } : { kind: "ceiling" };
+
+  // Above the cloud deck the hazards are pillars, not pipes.
+  if (s.y < CLOUD_Y) return hitsPillar(s, r);
+
+  for (const p of s.pipes) {
+    const a = tiltOf(s, p);
+
+    // Broad phase. A leaning pipe reaches further sideways than its width, so
+    // widen the test by the worst-case horizontal excursion before skipping.
+    const slack = a ? Math.abs(Math.sin(a)) * (H - GROUND_H) : 0;
+    if (p.x + p.w + slack < BIRD_X - r || p.x - slack > BIRD_X + r) continue;
+
+    const bands = gapsOf(s, p);
+
+    // Rotating the bird into the pipe's local frame is equivalent to rotating
+    // the pipe, and lets every axis-aligned test below work unchanged.
+    let bx = BIRD_X, by = s.y;
+    if (a) {
+      const px = p.x + p.w / 2, py = pivotY(s, p);
+      const dx = BIRD_X - px, dy = s.y - py;
+      const cos = Math.cos(-a), sin = Math.sin(-a);
+      bx = px + dx * cos - dy * sin;
+      by = py + dx * sin + dy * cos;
+    }
+
+    // A chevron's solid is its sliced diagonals.
+    if (p.chevron) {
+      for (const rct of chevronParts(s, p)) {
+        if (hitsRect(bx, by, r, rct.x, rct.y, rct.w, rct.h)) return { kind: "block" };
+      }
+      if (s.spikes > 0) {
+        const sp = 7 * s.spikes;
+        for (const b of bands) {
+          if (hitsRect(bx, by, r, p.x + 8, b.lo, p.w - 16, sp)) return { kind: "spike" };
+          if (hitsRect(bx, by, r, p.x + 8, b.hi - sp, p.w - 16, sp)) return { kind: "spike" };
+        }
+      }
+      continue;
+    }
+
+    // A V's solid is its sliced taper.
+    if (p.vee) {
+      for (const rct of vParts(s, p)) {
+        if (hitsRect(bx, by, r, rct.x, rct.y, rct.w, rct.h)) return { kind: "block" };
+      }
+      if (s.spikes > 0) {
+        const sp = 7 * s.spikes;
+        for (const b of bands) {
+          if (hitsRect(bx, by, r, p.x + 8, b.lo, p.w - 16, sp)) return { kind: "spike" };
+          if (hitsRect(bx, by, r, p.x + 8, b.hi - sp, p.w - 16, sp)) return { kind: "spike" };
+        }
+      }
+      continue;
+    }
+
+    // A tunnel's solid is its two bent tubes, not a simple band complement.
+    if (p.tunnel) {
+      for (const rct of tunnelParts(s, p)) {
+        if (hitsRect(bx, by, r, rct.x, rct.y, rct.w, rct.h)) return { kind: "block" };
+      }
+      // Spiked rims still line the corridor.
+      if (s.spikes > 0) {
+        const sp = 7 * s.spikes;
+        for (const b of bands) {
+          if (hitsRect(bx, by, r, p.x + 8, b.lo, p.w - 16, sp)) return { kind: "spike" };
+          if (hitsRect(bx, by, r, p.x + 8, b.hi - sp, p.w - 16, sp)) return { kind: "spike" };
+        }
+      }
+      continue;
+    }
+
+    // Solid segments are the complement of the open bands, measured from the
+    // same ceiling the renderer uses so the hitbox matches what is drawn.
+    let y = PIPE_TOP;
+    for (const b of bands) {
+      if (hitsRect(bx, by, r, p.x, y, p.w, b.lo - y)) {
+        // Upper (hanging) segment. Its underside is a landing face only when
+        // gravity is inverted and the bird is falling up onto it.
+        const face = b.lo;
+        const onFace = !a && s.gravDir < 0 && s.vy * s.gravDir > 0 &&
+                       (s.y + r) > face && (s.y - r) < face + 2;
+        return onFace ? { kind: "floor", surfaceY: face } : { kind: "block" };
+      }
+      y = b.hi;
+    }
+    if (hitsRect(bx, by, r, p.x, y, p.w, bot - y)) {
+      // Lower segment. Its top face is a landing face under normal gravity:
+      // the bird must be descending onto it, not embedded in its side.
+      // A leaning pipe has no flat top face, so it is never a bounce surface.
+      const onFace = !a && s.gravDir > 0 && s.vy * s.gravDir > 0 &&
+                     (s.y - r) < y && (s.y + r) > y - 2;
+      return onFace ? { kind: "floor", surfaceY: y } : { kind: "block" };
+    }
+
+    // Spiked rims: triangles jutting into every opening — never bounceable.
+    if (s.spikes > 0) {
+      const sp = 7 * s.spikes;
+      for (const b of bands) {
+        if (hitsRect(bx, by, r, p.x + 8, b.lo, p.w - 16, sp)) return { kind: "spike" };
+        if (hitsRect(bx, by, r, p.x + 8, b.hi - sp, p.w - 16, sp)) return { kind: "spike" };
+      }
+    }
+  }
+  // Oncoming flock: circle-vs-circle against each rival bird.
+  for (const f of s.foes) {
+    const dx = f.x - BIRD_X, dy = f.y - s.y;
+    const rr = r + BIRD_R;
+    if (dx*dx + dy*dy < rr*rr) return { kind: "foe", foe: f };
+  }
+
+  return null;
+}
+
+function takeHit(s) {
+  if (s.invulnT > 0) return;
+  if (s.shields > 0) {
+    s.shields--;
+    s.invulnT = 1.0;
+    s.flash = 0.5;
+    burst(BIRD_X, s.y, 20, "#60a5fa");
+    return;
+  }
+  s.lives--;
+  burst(BIRD_X, s.y, 26, "#f87171");
+  s.shake = 14;
+  if (s.lives > 0) {
+    // Respawn: recenter and clear the immediate area.
+    s.invulnT = 1.4;
+    // Restore this run's own gravity direction, not a hardcoded 1 —
+    // otherwise a respawn would quietly undo UPSIDE DOWN.
+    s.y = H / 2; s.vy = 0; s.gravDir = s.baseGravDir;
+    s.pipes = s.pipes.filter(p => p.x > BIRD_X + 170 || p.x + p.w < BIRD_X - 40);
+    s.foes = s.foes.filter(f => f.x > BIRD_X + 150);
+    s.flash = 0.6;
+  } else {
+    gameOver();
+  }
+}
+
+// ============================================================
+//  UPDATE
+// ============================================================
+function update(dt) {
+  const s = S;
+  if (rec) rec.frame++;
+  const d = dt * s.timeScale;
+  s.t += d;
+  s.scrollX += s.speed * d;
+
+  // bird physics
+  // Gravity eases off with altitude alongside flap power, so the whole sky is
+  // reachable: the bird drifts near the ceiling rather than being hard-capped
+  // partway up by a gravity it can no longer fight.
+  let lift = s.y < CLOUD_Y ? (1 - skyT(s.y) * 0.72) : 1;
+  if (s.o2Out && s.inSky) {
+    // With the tank empty the bird sinks hard toward the cloud deck. This pull
+    // is always DOWNWARD in world terms, never along gravDir — under UPSIDE
+    // DOWN an inverted pull would drive the bird into the ceiling and strand
+    // it there with no flap to escape.
+    s.vy += s.gravity * 2.4 * d;
+  } else {
+    s.vy += s.gravity * lift * s.gravDir * d;
+  }
+  const mf = BASE.maxFall;
+  s.vy = Math.max(-mf, Math.min(mf, s.vy));
+  s.y += s.vy * d;
+
+  const targetRot = Math.max(-0.5, Math.min(MAX_ROT, s.vy / 520)) * s.gravDir;
+  s.rot += (targetRot - s.rot) * Math.min(1, d * 10);
+  s.flapAnim = Math.max(0, s.flapAnim - d * 5);
+  if (s.invulnT > 0) s.invulnT -= dt;
+  if (s.flash > 0)   s.flash = Math.max(0, s.flash - dt * 2);
+
+  // Hungry pipes: pay out the queued lunge across ~0.3-0.55s with an ease-out,
+  // so the field surges and settles instead of teleporting.
+  // Warning phase: count down, then release the armed distance into the queue.
+  if (s.lurchWarn > 0) {
+    s.lurchWarn -= dt;
+    if (s.lurchWarn <= 0) {
+      s.lurchWarn = 0;
+      s.lurchQueue += s.lurchPend;
+      s.lurchTotal = s.lurchQueue;
+      s.lurchPaid = 0;
+      s.lurchT = 0;
+      s.lurchDur = 0.30 + Math.min(0.25, s.lurchQueue / 400);
+      s.lurchPend = 0;
+    }
+  }
+
+  let lurch = 0;
+  if (s.lurchQueue > 0) {
+    s.lurchT = Math.min(s.lurchDur, s.lurchT + d);
+    const k = s.lurchT / s.lurchDur;            // 0..1
+    const eased = 1 - Math.pow(1 - k, 2);       // quadratic ease-out
+    const want = s.lurchTotal * eased;          // distance owed by now
+    lurch = Math.min(s.lurchQueue, want - s.lurchPaid);
+    if (lurch < 0) lurch = 0;
+    s.lurchPaid += lurch;
+    s.lurchQueue -= lurch;
+    s.shake = Math.max(s.shake, 5 * (1 - k));
+    if (s.lurchQueue <= 0.01) { s.lurchQueue = 0; s.lurchPaid = 0; s.lurchTotal = 0; }
+  }
+
+  // Pipes already in play keep scrolling even while the bird is up in the sky,
+  // so ducking above the clouds never erases an obstacle that was about to be
+  // hit — it just leaves for a moment and comes back to the same field. Only
+  // the SPAWNING of new pipes pauses while the bird is away.
+  for (const p of s.pipes) {
+    p.x -= s.speed * d;
+    if (lurch > 0 && p.x + p.w > BIRD_X) p.x -= lurch;
+  }
+  s.nextX -= s.speed * d + lurch;
+  s.pipes = s.pipes.filter(p => p.x + p.w > -20);
+
+  if (!s.inSky) {
+    // Only top the field back up while the bird is down here. If it has been
+    // away long enough for the field to empty, restart it ahead of the bird so
+    // re-entry is never a blind landing.
+    if (!s.pipes.length && s.nextX < BIRD_X + 300) s.nextX = BIRD_X + 300;
+    while (s.nextX < W + 160) spawnPipe(s);
+  }
+
+  // scoring
+  for (const p of s.pipes) {
+    if (!p.passed && p.x + p.w < BIRD_X - s.radius) {
+      p.passed = true;
+      s.pipesPassed++;
+      s.streak++;
+      let pts = 1 * s.scoreMult;
+      if (s.combo && s.streak % 3 === 0) pts += 1 * s.scoreMult;
+      s.score += pts;
+      burst(BIRD_X + 40, s.y, 6, "#ffd166");
+    }
+  }
+
+  // ---- steady income ----
+  // Ticks on real time, not the scaled clock, so SLOW MOTION does not slow the
+  // earnings. Fractions carry over, so no partial second is ever lost.
+  if (s.income) {
+    s.incomeAcc += dt * s.income;
+    if (s.incomeAcc >= 1) {
+      const whole = Math.floor(s.incomeAcc);
+      s.incomeAcc -= whole;
+      const pts = whole * s.scoreMult;
+      s.score += pts;
+      s.incomeEarned += pts;
+    }
+  }
+
+  // ---- oxygen ----
+  // A full tank is O2_PILLARS worth of travel. It only drains above the cloud
+  // deck; back below, it refills at half the rate.
+  const tank = s.spacing * 1.15 * O2_PILLARS;
+  const moved = s.speed * d;
+  if (s.inSky) {
+    s.o2 = Math.max(0, s.o2 - moved / tank);
+    if (s.o2 <= 0) s.o2Out = true;
+  } else {
+    // Returning to the pipe zone restores the ability to flap immediately,
+    // even if the tank is still empty and refilling.
+    s.o2Out = false;
+    s.o2 = Math.min(1, s.o2 + (moved / tank) * O2_REFILL);
+  }
+
+  updatePillars(s, d);
+
+  // The camera has two fixed framings rather than tracking continuously:
+  //   pipe view (cam 0)       — the normal playfield
+  //   sky  view (cam SKY_TOP) — ceiling at the top, cloud deck at the bottom
+  // Crossing the cloud deck swaps between them, so each zone is shown whole.
+  // A little hysteresis on the boundary stops it flip-flopping while the bird
+  // skims the deck.
+  const deckMid = CLOUD_Y;
+  if (!s.inSky && s.y < deckMid - 26) s.inSky = true;
+  else if (s.inSky && s.y > deckMid + 26) s.inSky = false;
+
+  const want = s.inSky ? SKY_CAM : 0;
+  // Ease between the two framings so the transition reads as a sweep.
+  s.cam += (want - s.cam) * Math.min(1, dt * 3.4);
+  if (Math.abs(want - s.cam) < 0.5) s.cam = want;
+
+  // The bird keeps moving while the camera is still sweeping, so clamp the
+  // camera to always keep it on screen. Without this it is pushed off the top
+  // when climbing and off the bottom when falling back through the deck.
+  const pad = s.radius + 34;
+  s.cam = Math.min(s.cam, s.y - pad);
+  s.cam = Math.max(s.cam, s.y + pad - H);
+  s.cam = Math.max(SKY_CAM, Math.min(0, s.cam));
+
+  updateFoes(s, d, dt);
+  updateRockets(s, d, dt);
+
+  // particles
+  for (const q of s.particles) {
+    q.x += q.vx * dt; q.y += q.vy * dt;
+    q.vy += 300 * dt; q.life -= dt;
+  }
+  s.particles = s.particles.filter(q => q.life > 0);
+
+  // collision
+  const hit = collides(s);
+  if (hit) {
+    // BOUNCY BEAK: a full-commit dive — beak pinned at max downward rotation —
+    // deflects off a downward-facing surface instead of taking damage.
+    const diving = s.rot * s.gravDir >= MAX_ROT - 0.06;
+    if (s.bouncy && hit.kind === "floor" && diving && s.bounceCool <= 0) {
+      s.y = hit.surfaceY - (s.radius + 1) * s.gravDir;
+      s.vy = s.flap * 0.92 * s.gravDir;   // roughly a free flap
+      s.rot = -0.3 * s.gravDir;
+      s.bounceCool = 0.18;
+      s.bounces++;
+      s.shake = Math.max(s.shake, 6);
+      burst(BIRD_X, hit.surfaceY, 12, "#34d399");
+    } else {
+      takeHit(s);
+    }
+  }
+  if (s.bounceCool > 0) s.bounceCool -= dt;
+
+  // upgrade gate
+  if (mode === "play" && s.pipesPassed >= s.nextUpgradeAt) openUpgrade();
+}
+
+// ============================================================
+//  RENDER
+// ============================================================
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawPipeBody(x, y, w, h, flip, bothLips) {
+  if (h <= 0) return;
+  const g = ctx.createLinearGradient(x, 0, x + w, 0);
+  g.addColorStop(0,    "#2f7d4f");
+  g.addColorStop(0.3,  "#5fbf7e");
+  g.addColorStop(0.55, "#49a367");
+  g.addColorStop(1,    "#236040");
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#17402c";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+
+  // lip(s) — a floating midsection gets one on each end
+  const lipH = Math.min(20, Math.max(6, h / 2)), lw = w + 12;
+  const lips = bothLips ? [y, y + h - lipH] : [flip ? y + h - lipH : y];
+  for (const ly of lips) {
+    ctx.fillStyle = g;
+    roundRect(x - 6, ly, lw, lipH, 3); ctx.fill();
+    ctx.strokeStyle = "#17402c"; ctx.stroke();
+  }
+}
+
+// Draws a bird sprite at the origin. `pal` supplies the body colours so the
+// hostile flock can reuse the exact same shape as the player.
+function drawBirdSprite(r, wingAngle, pal, beakColor, faceLeft) {
+  // body
+  const bg = ctx.createRadialGradient(-r*.3, -r*.4, 1, 0, 0, r*1.5);
+  bg.addColorStop(0, pal.hi);
+  bg.addColorStop(1, pal.lo);
+  ctx.fillStyle = bg;
+  ctx.beginPath(); ctx.ellipse(0, 0, r * 1.15, r, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = pal.line; ctx.lineWidth = 1.6; ctx.stroke();
+  // wing
+  ctx.fillStyle = pal.wing;
+  ctx.save(); ctx.translate(-r*.15, 0); ctx.rotate(wingAngle);
+  ctx.beginPath(); ctx.ellipse(0, 0, r*.75, r*.45, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = pal.wingLine; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.restore();
+  // eye
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(r*.45, -r*.35, r*.33, 0, 7); ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath(); ctx.arc(r*.55, -r*.35, r*.16, 0, 7); ctx.fill();
+  // beak
+  ctx.fillStyle = beakColor;
+  ctx.beginPath();
+  ctx.moveTo(r*1.05, -r*.1); ctx.lineTo(r*1.75, r*.08); ctx.lineTo(r*1.05, r*.32);
+  ctx.closePath(); ctx.fill();
+}
+
+// A Greek column: fluted beige shaft with a capital at the open end.
+function drawPillar(x, y, w, h, risesFromBelow) {
+  if (h <= 0) return;
+  const g = ctx.createLinearGradient(x, 0, x + w, 0);
+  g.addColorStop(0,    "#b5a284");
+  g.addColorStop(0.18, "#efe4cd");
+  g.addColorStop(0.45, "#e2d3b6");
+  g.addColorStop(0.72, "#cbb894");
+  g.addColorStop(1,    "#9c8a6c");
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+
+  // Flutes.
+  ctx.strokeStyle = "rgba(120,102,74,.45)";
+  ctx.lineWidth = 1.4;
+  for (let i = 1; i < 5; i++) {
+    const fx = x + (w * i / 5);
+    ctx.beginPath(); ctx.moveTo(fx, y); ctx.lineTo(fx, y + h); ctx.stroke();
+  }
+  ctx.strokeStyle = "#8a7857"; ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+
+  // Capital at the end that faces the gap.
+  const capH = 16, capW = w + 16;
+  const cy = risesFromBelow ? y : y + h - capH;
+  ctx.fillStyle = "#f3ead6";
+  ctx.fillRect(x - 8, cy, capW, capH);
+  ctx.strokeStyle = "#8a7857"; ctx.lineWidth = 2;
+  ctx.strokeRect(x - 8, cy, capW, capH);
+  // abacus band
+  ctx.fillStyle = "#d9c9a6";
+  ctx.fillRect(x - 8, risesFromBelow ? cy + capH - 5 : cy, capW, 5);
+}
+
+// The cloud deck: a soft band of overlapping puffs at CLOUD_Y that reads as the
+// floor of the sky and the ceiling of the pipe zone.
+function drawClouds(s, scroll) {
+  const y = CLOUD_Y;
+  const half = CLOUD_TH / 2;
+  ctx.save();
+
+  // Base haze band, three times the original thickness.
+  const g = ctx.createLinearGradient(0, y - half, 0, y + half);
+  g.addColorStop(0,    "rgba(255,255,255,0)");
+  g.addColorStop(0.22, "rgba(247,250,255,.80)");
+  g.addColorStop(0.45, "rgba(250,252,255,.95)");
+  g.addColorStop(0.72, "rgba(233,241,252,.88)");
+  g.addColorStop(1,    "rgba(210,225,245,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, y - half, W, CLOUD_TH);
+
+  // Three rows of puffs at different depths fill out the volume.
+  const rows = [
+    { dy: -half * 0.62, r: 30, step: 88, par: 0.60, col: "rgba(255,255,255,.92)" },
+    { dy: -half * 0.10, r: 38, step: 74, par: 0.46, col: "rgba(250,252,255,.95)" },
+    { dy:  half * 0.42, r: 32, step: 96, par: 0.32, col: "rgba(228,238,251,.90)" }
+  ];
+  for (const row of rows) {
+    ctx.fillStyle = row.col;
+    for (let i = -1; i < W / row.step + 3; i++) {
+      const px = ((i * row.step) - (scroll * row.par) % row.step);
+      const wob = Math.sin(i * 1.7) * 10;
+      const rr = row.r + ((i * 29) % 14);
+      ctx.beginPath(); ctx.arc(px + row.step / 2, y + row.dy + wob, rr, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(px + row.step * 0.92, y + row.dy + wob * 0.5, rr * 0.7, 0, 7); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+// A fourth layer: sparse, softly scattered clouds high above the deck. Purely
+// scenery — nothing collides with them — so they give the upper sky depth.
+function drawHighClouds(s, scroll) {
+  ctx.save();
+  for (let i = 0; i < 14; i++) {
+    // Deterministic pseudo-random placement, so the field is stable per index.
+    const seed = i * 127.1;
+    const rx = (Math.sin(seed) * 0.5 + 0.5);
+    const ry = (Math.sin(seed * 1.7) * 0.5 + 0.5);
+    const rs = (Math.sin(seed * 2.3) * 0.5 + 0.5);
+
+    const par = 0.12 + rs * 0.16;
+    const spanX = W + 260;
+    const px = ((rx * spanX) - (scroll * par) % spanX + spanX) % spanX - 130;
+    // Spread through the upper sky, above the deck and below the ceiling.
+    const py = HIGH_Y + (ry - 0.5) * 300;
+    if (py > CLOUD_Y - CLOUD_TH * 0.7) continue;
+
+    const rr = 26 + rs * 34;
+    const a = 0.16 + rs * 0.20;
+    const cg = ctx.createRadialGradient(px, py, rr * 0.2, px, py, rr * 1.5);
+    cg.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`);
+    cg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = cg;
+    // A few overlapping lobes so each reads as a cloud, not a dot.
+    ctx.beginPath(); ctx.arc(px, py, rr * 1.5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(px + rr * 0.8, py + rr * 0.18, rr * 1.15, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(px - rr * 0.7, py + rr * 0.10, rr * 1.05, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function draw() {
+  const s = S;
+  ctx.save();
+  if (s && s.shake > 0) {
+    ctx.translate((Math.random()-.5) * s.shake, (Math.random()-.5) * s.shake);
+  }
+
+  const cam = s ? s.cam : 0;
+
+  // Sky backdrop spans the full world height, so climbing reveals paler air.
+  const sky = ctx.createLinearGradient(0, SKY_TOP - cam, 0, H - cam);
+  sky.addColorStop(0,    "#cfe4ff");   // thin air at the ceiling
+  sky.addColorStop(0.28, "#8fb6e8");
+  sky.addColorStop(0.46, "#5f86c4");
+  sky.addColorStop(0.62, "#1b2a4a");   // below the clouds: the original night sky
+  sky.addColorStop(0.8,  "#33507d");
+  sky.addColorStop(1,    "#6f8fbd");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // Everything below is drawn in world space; the camera only shifts vertically.
+  ctx.translate(0, -cam);
+
+  const scroll = s ? s.scrollX : 0;
+
+  // parallax hills
+  ctx.fillStyle = "rgba(30,55,70,.55)";
+  for (let i = -1; i < 5; i++) {
+    const x = ((i * 170) - (scroll * 0.2) % 170);
+    ctx.beginPath();
+    ctx.arc(x + 85, H - GROUND_H + 20, 96, Math.PI, 0);
+    ctx.fill();
+  }
+  ctx.fillStyle = "rgba(38,72,88,.6)";
+  for (let i = -1; i < 6; i++) {
+    const x = ((i * 130) - (scroll * 0.38) % 130);
+    ctx.beginPath();
+    ctx.arc(x + 65, H - GROUND_H + 24, 66, Math.PI, 0);
+    ctx.fill();
+  }
+
+  if (s) {
+    // ---- scattered high clouds, behind everything in the sky ----
+    drawHighClouds(s, scroll);
+
+    // ---- Greek pillars, above the cloud deck ----
+    for (const p of s.pillars) {
+      if (p.x > W + 40 || p.x + p.w < -40) continue;
+      const gapNat = pillarGap(p);
+
+      // Warning shudder: the whole pillar trembles and warms in colour for a
+      // moment before it lurches, so the move can be seen coming.
+      const tell = pillarTell(p);
+      const shook = tell > 0;
+      if (shook) {
+        ctx.save();
+        const amp = 1 + tell * 3.5;
+        ctx.translate((Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp * 0.6);
+      }
+
+      for (const sg of pillarSolids(s, p)) {
+        // A segment ending at the natural gap's top edge is the hanging column;
+        // anything else reads as rising, so its capital faces upward.
+        const rises = sg.lo >= gapNat.hi - 1;
+        drawPillar(p.x, sg.lo, p.w, sg.hi - sg.lo, rises);
+      }
+
+      // Blast scarring on damaged stone.
+      if (p.cracks && p.cracks.length) {
+        const solids = pillarSolids(s, p);
+        ctx.strokeStyle = "rgba(92,76,52,.75)";
+        ctx.lineWidth = 1.4;
+        for (const c of p.cracks) {
+          if (!solids.some(sg => c.y > sg.lo && c.y < sg.hi)) continue;
+          const cx = p.x + p.w / 2 + c.off;
+          ctx.beginPath();
+          ctx.moveTo(cx, c.y);
+          const x2 = cx + Math.cos(c.ang) * c.len, y2 = c.y + Math.sin(c.ang) * c.len;
+          ctx.lineTo(x2, y2);
+          ctx.lineTo(x2 + Math.cos(c.ang + 0.9) * c.len * 0.5,
+                     y2 + Math.sin(c.ang + 0.9) * c.len * 0.5);
+          ctx.stroke();
+        }
+      }
+
+      if (shook) {
+        // A tint plus an arrow showing which way it is about to go.
+        ctx.fillStyle = `rgba(255,${(170 - tell * 90) | 0},60,${(0.10 + tell * 0.22).toFixed(3)})`;
+        for (const sg of pillarSolids(s, p)) {
+          ctx.fillRect(p.x, sg.lo, p.w, sg.hi - sg.lo);
+        }
+        ctx.restore();
+
+        const ay = gapNat.lo + p.gap / 2;
+        const dirGuess = p.dir;
+        if (tell > 0.35) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, (tell - 0.35) * 2.4);
+          ctx.fillStyle = "#ffd166";
+          const ax = p.x + p.w / 2;
+          const dy = dirGuess < 0 ? -1 : 1;
+          ctx.beginPath();
+          ctx.moveTo(ax, ay + dy * 26);
+          ctx.lineTo(ax - 9, ay + dy * 10);
+          ctx.lineTo(ax + 9, ay + dy * 10);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+    // pipes
+    for (const p of s.pipes) {
+      const bands = gapsOf(s, p);
+      const bot = H - GROUND_H;
+
+      // HUNGRY PIPES warning: the pipe trembles and shows an arrow pointing the
+      // way it is about to lunge, the same telegraph pillars use.
+      const lTell = lurchTell(s);
+      if (lTell > 0) {
+        ctx.save();
+        const amp = 1 + lTell * 3.5;
+        ctx.translate((Math.random() - 0.5) * amp * 1.4, (Math.random() - 0.5) * amp * 0.5);
+      }
+
+      // LEANING PIPES: rotate the whole pair about its gap centre so the top
+      // and bottom segments stay on one line.
+      const tilt = tiltOf(s, p);
+      if (tilt) {
+        ctx.save();
+        const px = p.x + p.w / 2, py = pivotY(s, p);
+        ctx.translate(px, py);
+        ctx.rotate(tilt);
+        ctx.translate(-px, -py);
+      }
+
+      if (p.chevron) {
+        // Two straight crossing strokes spanning the full width — a real X.
+        const shape = chevronShape(s, p);
+        const { sides, thick } = shape;
+        const xL = p.x, xR = p.x + p.w;
+        const ht = thick / 2;
+
+        for (const sd of sides) {
+          const top = sd.cy - sd.spread, bottom = sd.cy + sd.spread;
+          // Clamp the buried ends to just past the edge so the quads do not
+          // stretch absurdly far off screen.
+          const clamp = v => sd.side < 0
+            ? Math.max(v, sd.anchor - PIPE_OVERDRAW)
+            : Math.min(v, sd.anchor + PIPE_OVERDRAW);
+
+          for (const [yL, yR] of [[top, bottom], [bottom, top]]) {
+            const a = clamp(yL), b = clamp(yR);
+            const g2 = ctx.createLinearGradient(0, Math.min(a, b) - ht, 0, Math.max(a, b) + ht);
+            g2.addColorStop(0,    "#2f7d4f");
+            g2.addColorStop(0.35, "#6fc98e");
+            g2.addColorStop(0.68, "#49a367");
+            g2.addColorStop(1,    "#236040");
+            ctx.fillStyle = g2;
+            ctx.beginPath();
+            ctx.moveTo(xL, a - ht);
+            ctx.lineTo(xR, b - ht);
+            ctx.lineTo(xR, b + ht);
+            ctx.lineTo(xL, a + ht);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = "#17402c";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        }
+
+      } else if (p.vee) {
+        // Sliced taper. Each slice is drawn as a pipe body; the shared
+        // gradient keeps them reading as one continuous wedge.
+        for (const rct of vParts(s, p, true)) {
+          const g2 = ctx.createLinearGradient(rct.x, 0, rct.x + rct.w, 0);
+          g2.addColorStop(0,    "#2f7d4f");
+          g2.addColorStop(0.35, "#57b678");
+          g2.addColorStop(1,    "#2a6e46");
+          ctx.fillStyle = g2;
+          ctx.fillRect(rct.x, rct.y, rct.w, rct.h);
+        }
+        // Outline the tapering inner edges so the V shape reads clearly.
+        ctx.strokeStyle = "#17402c";
+        ctx.lineWidth = 2.5;
+        const slices = vParts(s, p, true);
+        for (const side of ["top", "bottom"]) {
+          const seg = slices.filter(rc => side === "top" ? rc.y < bands[0].lo + 1
+                                                          : rc.y > bands[0].lo);
+          if (!seg.length) continue;
+          ctx.beginPath();
+          seg.forEach((rc, i) => {
+            const ey = side === "top" ? rc.y + rc.h : rc.y;
+            i ? ctx.lineTo(rc.x + rc.w / 2, ey) : ctx.moveTo(rc.x + rc.w / 2, ey);
+          });
+          ctx.stroke();
+        }
+      } else if (p.tunnel) {
+        // Two U-shaped tubes, ∩ over U, each of constant wall thickness with
+        // real bends. Drawn from the same rectangles collision uses.
+        const parts = tunnelParts(s, p, true);   // extended for drawing
+        for (const r of parts) {
+          const horizontal = r.w > r.h;
+          const g2 = horizontal
+            ? ctx.createLinearGradient(0, r.y, 0, r.y + r.h)
+            : ctx.createLinearGradient(r.x, 0, r.x + r.w, 0);
+          g2.addColorStop(0,    "#2f7d4f");
+          g2.addColorStop(0.3,  "#5fbf7e");
+          g2.addColorStop(0.55, "#49a367");
+          g2.addColorStop(1,    "#236040");
+          ctx.fillStyle = g2;
+          ctx.fillRect(r.x, r.y, r.w, r.h);
+          ctx.strokeStyle = "#17402c";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+        }
+
+        // A lip on each open mouth, so the corridor reads as a pipe entrance.
+        const bLo = bands[0].lo, bHi = bands[bands.length - 1].hi;
+        ctx.strokeStyle = "#17402c";
+        ctx.lineWidth = 2;
+        for (const [lx] of [[p.x - 6], [p.x + p.w - 6]]) {
+          for (const [ly, lh] of [[bLo - TUNNEL_WALL, TUNNEL_WALL], [bHi, TUNNEL_WALL]]) {
+            const lg = ctx.createLinearGradient(lx, 0, lx + 12, 0);
+            lg.addColorStop(0, "#5fbf7e");
+            lg.addColorStop(1, "#2f7d4f");
+            ctx.fillStyle = lg;
+            roundRect(lx, ly - 2, 12, lh + 4, 3); ctx.fill(); ctx.stroke();
+          }
+        }
+
+        // Blast holes still punch through as extra bands.
+        for (let i = 1; i < bands.length; i++) {
+          drawPipeBody(p.x, bands[i - 1].hi, p.w, bands[i].lo - bands[i - 1].hi, true, true);
+        }
+      } else {
+        // Draw the solid complement of the open bands, starting above the cloud
+        // deck and running past the ground so a swayed or tilted pipe never
+        // shows its cut end.
+        let y = PIPE_TOP;
+        for (let i = 0; i < bands.length; i++) {
+          const top = i === 0 ? y - PIPE_OVERDRAW : y;
+          drawPipeBody(p.x, top, p.w, bands[i].lo - top, true, y > 0);
+          y = bands[i].hi;
+        }
+        drawPipeBody(p.x, y, p.w, (bot + PIPE_OVERDRAW) - y, false,
+                     y < bot && bands.length > 1);
+      }
+
+      if (s.spikes > 0) {
+        const sp = 7 * s.spikes;
+        ctx.fillStyle = "#d7dde8";
+        const n = 5, sw = (p.w - 16) / n;
+        for (const b of bands) {
+          for (let i = 0; i < n; i++) {
+            const bx = p.x + 8 + i * sw;
+            ctx.beginPath();
+            ctx.moveTo(bx, b.lo); ctx.lineTo(bx + sw/2, b.lo + sp); ctx.lineTo(bx + sw, b.lo);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(bx, b.hi); ctx.lineTo(bx + sw/2, b.hi - sp); ctx.lineTo(bx + sw, b.hi);
+            ctx.fill();
+          }
+        }
+      }
+
+      // Blast damage: scorched rims around holes, cracks on nearby pipes.
+      if (p.holes && p.holes.length) {
+        // An edge only gets a charred lip where the blast actually cut through
+        // pipe. Where it opens onto air — the pipe's own gap, or another hole
+        // it merged with — there is no material to char, so the scorch just
+        // fades out in that direction instead.
+        const solidAt = y => {
+          if (y < 0 || y > bot) return false;
+          for (const b of bands) if (y > b.lo && y < b.hi) return false;
+          return true;
+        };
+
+        // Same displacement the bands use, so scorch marks ride with the pipe.
+        const hOff = p.split ? swayOf(s, p) : (gapCentreOf(s, p) - p.base);
+        for (const hRaw of p.holes) {
+          const h = { lo: hRaw.lo + hOff, hi: hRaw.hi + hOff };
+          const cy = (h.lo + h.hi) / 2, rr = (h.hi - h.lo) / 2;
+          // Probe just outside each edge to see whether pipe material remains.
+          const solidAbove = solidAt(h.lo - 3);
+          const solidBelow = solidAt(h.hi + 3);
+
+          // Scorch profile, with | as the cut edge:
+          //   both edges cut : |@#=--::.............::--=#@|
+          //   one side air   : |@#=--::.......
+          // The burn is darkest right at each cut rim and lightens INWARD
+          // across the opening. An edge that opens onto air was never burned,
+          // so it gets no gradient at all.
+          const inward = Math.min(rr * 0.9, 34);
+          for (const [ey, dir, solid] of [[h.lo, 1, solidAbove], [h.hi, -1, solidBelow]]) {
+            if (!solid) continue;
+
+            // Runs from the rim toward the middle of the hole.
+            const g2 = ctx.createLinearGradient(0, ey, 0, ey + inward * dir);
+            g2.addColorStop(0,    "rgba(26,13,6,.88)");
+            g2.addColorStop(0.18, "rgba(38,19,9,.62)");
+            g2.addColorStop(0.42, "rgba(50,27,12,.30)");
+            g2.addColorStop(0.70, "rgba(60,34,16,.12)");
+            g2.addColorStop(1,    "rgba(60,34,16,0)");
+            ctx.fillStyle = g2;
+            ctx.fillRect(p.x, dir > 0 ? ey : ey - inward, p.w, inward);
+
+            // Charred lip along the cut itself.
+            ctx.strokeStyle = "rgba(24,12,5,.85)";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            for (let i = 0; i <= 6; i++) {
+              const px2 = p.x + (p.w * i / 6);
+              const jag = (Math.sin(i * 3.1 + cy) * 3);
+              i ? ctx.lineTo(px2, ey + jag) : ctx.moveTo(px2, ey + jag);
+            }
+            ctx.stroke();
+          }
+        }
+      }
+      if (p.cracks && p.cracks.length) {
+        ctx.strokeStyle = "rgba(18,40,26,.75)";
+        ctx.lineWidth = 1.4;
+        const cOff = p.split ? swayOf(s, p) : (gapCentreOf(s, p) - p.base);
+        for (const cRaw of p.cracks) {
+          const c = { ...cRaw, y: cRaw.y + cOff };
+          // Only draw a crack where the pipe is actually solid.
+          let solid = true;
+          for (const b of bands) if (c.y > b.lo && c.y < b.hi) { solid = false; break; }
+          if (!solid) continue;
+          const cx = p.x + p.w / 2 + c.off;
+          ctx.beginPath();
+          ctx.moveTo(cx, c.y);
+          const x2 = cx + Math.cos(c.ang) * c.len, y2 = c.y + Math.sin(c.ang) * c.len;
+          ctx.lineTo(x2, y2);
+          ctx.lineTo(x2 + Math.cos(c.ang + 0.9) * c.len * 0.5,
+                     y2 + Math.sin(c.ang + 0.9) * c.len * 0.5);
+          ctx.stroke();
+        }
+      }
+
+      if (tilt) ctx.restore();
+
+      if (lTell > 0) {
+        // Warm tint over the solid sections, then a leftward arrow in the gap.
+        ctx.fillStyle = `rgba(255,${(170 - lTell * 90) | 0},60,${(0.10 + lTell * 0.20).toFixed(3)})`;
+        let ty = PIPE_TOP;
+        for (const b of bands) {
+          if (b.lo > ty) ctx.fillRect(p.x, ty, p.w, b.lo - ty);
+          ty = b.hi;
+        }
+        if (ty < bot) ctx.fillRect(p.x, ty, p.w, bot - ty);
+        ctx.restore();
+
+        if (lTell > 0.3) {
+          const mid = bands[0];
+          const ay = (mid.lo + mid.hi) / 2;
+          const ax = p.x + p.w / 2;
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, (lTell - 0.3) * 2.6);
+          ctx.fillStyle = "#fb923c";
+          ctx.beginPath();
+          ctx.moveTo(ax - 20, ay);
+          ctx.lineTo(ax - 4, ay - 11);
+          ctx.lineTo(ax - 4, ay + 11);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+
+    // particles
+    for (const q of s.particles) {
+      ctx.globalAlpha = Math.max(0, q.life / q.max);
+      ctx.fillStyle = q.color;
+      ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Fog curse: a wall of cloud that closes in as it stacks. The clear
+    // window shrinks and the bank thickens, so even level 1 genuinely hides
+    // the next pipe instead of tinting it.
+    if (s.fog > 0) {
+      const clear = Math.max(30, 104 - s.fog * 26);  // readable margin ahead
+      const x0 = BIRD_X + clear;
+      const peak = Math.min(0.98, 0.60 + s.fog * 0.19);
+      const mid  = peak * (0.66 + s.fog * 0.06);
+
+      // The gradient spans the FULL width and is painted across the whole
+      // playfield, so there is no seam where the bank begins. The clear window
+      // ahead of the bird is expressed as stops inside that span rather than as
+      // a clipped rectangle starting mid-screen.
+      // Multi-stop ramp from the very left edge. A flat run of zero followed by
+      // a sudden ramp is what read as a hard line, so the alpha instead eases up
+      // continuously across the whole width, staying near-invisible through the
+      // clear window rather than exactly zero.
+      const kClear = x0 / W;
+      const kMid   = kClear + (1 - kClear) * 0.22;
+      const fg = ctx.createLinearGradient(0, 0, W, 0);
+      fg.addColorStop(0, "rgba(206,215,232,0)");
+      for (let i = 1; i <= 5; i++) {
+        const k = kClear * (i / 6);
+        // Cubic ease-in: imperceptible near the bird, blending into the bank.
+        const a = mid * 0.16 * Math.pow(i / 6, 3);
+        fg.addColorStop(k, `rgba(206,215,232,${a.toFixed(4)})`);
+      }
+      fg.addColorStop(kClear, `rgba(206,215,232,${(mid * 0.16).toFixed(4)})`);
+      fg.addColorStop(kMid,   `rgba(206,215,232,${mid.toFixed(3)})`);
+      fg.addColorStop(1,      `rgba(212,220,236,${peak.toFixed(3)})`);
+      ctx.fillStyle = fg;
+      ctx.fillRect(0, 0, W, H - GROUND_H);
+
+      // Drifting banks so the fog has motion and body. They fade out toward
+      // the left rather than being clipped, which is what made the edge read
+      // as a hard line.
+      for (let i = 0; i < 4; i++) {
+        const sp = 14 + i * 9;
+        const bx = W - ((s.t * sp + i * 137) % (W + 250)) + 60;
+        const by = 70 + i * 128 + Math.sin(s.t * 0.5 + i) * 26;
+        const rad = 92 + i * 22;
+        if (bx + rad < 0) continue;
+        // Soften each bank by how far left it has drifted into the clear zone.
+        const fade = Math.max(0, Math.min(1, (bx - BIRD_X * 0.4) / (x0 + 120)));
+        if (fade <= 0) continue;
+        const cg = ctx.createRadialGradient(bx, by, 4, bx, by, rad);
+        const a = Math.min(0.5, 0.16 + s.fog * 0.12) * fade;
+        cg.addColorStop(0, `rgba(226,232,244,${a.toFixed(3)})`);
+        cg.addColorStop(1, "rgba(226,232,244,0)");
+        ctx.save();
+        ctx.fillStyle = cg;
+        ctx.beginPath(); ctx.arc(bx, by, rad, 0, 7); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // rockets + their exhaust trail
+    for (const rk of s.rockets) {
+      for (const t of rk.trail) {
+        if (t.life <= 0) continue;
+        ctx.globalAlpha = Math.max(0, t.life / 0.32) * 0.7;
+        ctx.fillStyle = "#fdba74";
+        ctx.beginPath(); ctx.arc(t.x, t.y, 3.2 * (t.life / 0.32) + 1, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.translate(rk.x, rk.y);
+      ctx.fillStyle = "#e5e7eb";
+      ctx.beginPath();
+      ctx.moveTo(11, 0); ctx.lineTo(-6, -4.5); ctx.lineTo(-6, 4.5);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#ef4444";
+      ctx.fillRect(-9, -3.5, 4, 7);
+      ctx.restore();
+    }
+
+    // Oncoming flock — drawn AFTER the fog on purpose. A foe closes at twice
+    // the scroll speed, so hiding it in cloud would make it undodgeable rather
+    // than merely hard; fog still conceals the pipes.
+    for (const f of s.foes) {
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      // They fly leftward, so mirror the sprite to face their travel direction.
+      ctx.scale(-1, 1);
+      ctx.rotate(-f.rot);
+      if (s.fog > 0) {
+        // Foes are veiled by fog, but only HALF as much as the scenery behind
+        // them. They close at twice the scroll speed, so fully fogging them
+        // puts recognition under human reaction time; half keeps the full
+        // ~0.9s of warning while still making them hazy and hard to read.
+        const kClear = (BIRD_X + Math.max(30, 104 - s.fog * 26)) / W;
+        const peak = Math.min(0.98, 0.60 + s.fog * 0.19);
+        const mid  = peak * (0.66 + s.fog * 0.06);
+        const kMid = kClear + (1 - kClear) * 0.22;
+        const k = f.x / W;
+        let local = 0;
+        if (k > kClear) {
+          local = k <= kMid
+            ? mid * ((k - kClear) / Math.max(1e-4, kMid - kClear))
+            : mid + (peak - mid) * ((k - kMid) / Math.max(1e-4, 1 - kMid));
+        }
+        ctx.globalAlpha = 1 - Math.min(0.62, local * 0.5);
+        // Dark rim so the silhouette still reads against a pale bank.
+        ctx.shadowColor = "rgba(20,28,45,.75)";
+        ctx.shadowBlur = 8;
+      }
+      drawBirdSprite(BIRD_R, -0.4 + f.flapAnim * 1.5, f.pal, f.pal.beak);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    // bird
+    ctx.save();
+    ctx.translate(BIRD_X, s.y);
+    ctx.rotate(s.rot);
+    if (s.gravDir < 0) ctx.scale(1, -1);
+    if (s.invulnT > 0) ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(s.t * 18));
+
+    if (s.shields > 0) {
+      ctx.strokeStyle = "rgba(96,165,250,.85)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(0, 0, s.radius + 8, 0, 7); ctx.stroke();
+    }
+
+    const r = s.radius;
+    // beak glows green while BOUNCY BEAK is armed (max dive tilt reached)
+    const armed = s.bouncy && s.rot * s.gravDir >= MAX_ROT - 0.06 && s.bounceCool <= 0;
+    if (armed) { ctx.shadowColor = "#34d399"; ctx.shadowBlur = 12; }
+    drawBirdSprite(r, -0.4 + s.flapAnim * 1.5, PLAYER_PAL,
+                   armed ? "#34d399" : "#ef6b34");
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    // ---- cloud deck ----
+    // Drawn LAST of the world layers, so the haze lies over everything that
+    // passes through it: the cut tops of the pipes, the feet of the rising
+    // columns, and the bird itself while it crosses between zones.
+    drawClouds(s, scroll);
+
+  }
+
+  // ground
+  ctx.fillStyle = "#8a6b3c";
+  ctx.fillRect(0, H - GROUND_H, W, GROUND_H);
+  ctx.fillStyle = "#6fae4a";
+  ctx.fillRect(0, H - GROUND_H, W, 14);
+  ctx.fillStyle = "#5c9440";
+  for (let i = -1; i < W / 18 + 2; i++) {
+    const x = i * 18 - (scroll % 18);
+    ctx.fillRect(x, H - GROUND_H + 10, 9, 5);
+  }
+  ctx.strokeStyle = "#4b3a1f"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, H - GROUND_H + 1); ctx.lineTo(W, H - GROUND_H + 1); ctx.stroke();
+
+  // Back to screen space for the ground, HUD and overlays.
+  ctx.translate(0, cam);
+
+  // ---------- HUD ----------
+  if (s && mode !== "start") {
+    ctx.textAlign = "center";
+    ctx.font = "bold 46px ui-monospace, monospace";
+    ctx.lineWidth = 5; ctx.strokeStyle = "rgba(0,0,0,.55)";
+    ctx.strokeText(s.score, W/2, 66);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(s.score, W/2, 66);
+
+    ctx.textAlign = "left";
+    ctx.font = "11px ui-monospace, monospace";
+    ctx.fillStyle = "rgba(255,255,255,.85)";
+    const untilUp = s.nextUpgradeAt - s.pipesPassed;
+    ctx.fillText(`PIPES ${s.pipesPassed}   NEXT PICK IN ${untilUp}`, 12, 22);
+    if (s.scoreMult > 1) ctx.fillText(`SCORE ×${s.scoreMult}`, 12, 38);
+    if (s.income) {
+      ctx.fillStyle = "#a7f3d0";
+      ctx.fillText(`+${s.income * s.scoreMult}/SEC`, 12, s.scoreMult > 1 ? 54 : 38);
+      ctx.fillStyle = "rgba(255,255,255,.85)";
+    }
+
+    // lives + shields
+    ctx.textAlign = "right";
+    let hud = "";
+    for (let i = 0; i < s.lives; i++) hud += "♥ ";
+    ctx.fillStyle = "#ff6b81";
+    ctx.font = "16px ui-monospace, monospace";
+    ctx.fillText(hud.trim(), W - 12, 24);
+    if (s.shields > 0) {
+      ctx.fillStyle = "#60a5fa";
+      ctx.fillText("◈ ".repeat(s.shields).trim(), W - 12, 44);
+    }
+
+    // ---- oxygen meter, down the left edge ----
+    if (s.o2 < 1 || s.inSky) {
+      const mx = 14, my = 132, mw = 12, mh = 190;
+      const low = s.o2 <= O2_WARN;
+      const pulse = 0.5 + 0.5 * Math.sin(s.t * 14);
+
+      ctx.fillStyle = "rgba(10,16,28,.72)";
+      roundRect(mx - 3, my - 3, mw + 6, mh + 6, 7); ctx.fill();
+
+      const fh = mh * s.o2;
+      const gg = ctx.createLinearGradient(0, my + mh - fh, 0, my + mh);
+      if (low) {
+        gg.addColorStop(0, `rgba(255,${(60 + pulse * 70) | 0},${(60 + pulse * 50) | 0},1)`);
+        gg.addColorStop(1, "rgba(180,20,30,1)");
+      } else {
+        gg.addColorStop(0, "#7dd3fc");
+        gg.addColorStop(1, "#2563eb");
+      }
+      ctx.fillStyle = gg;
+      roundRect(mx, my + mh - fh, mw, fh, 5); ctx.fill();
+
+      ctx.strokeStyle = low ? `rgba(255,90,90,${0.6 + pulse * 0.4})` : "rgba(200,225,255,.6)";
+      ctx.lineWidth = 1.5;
+      roundRect(mx, my, mw, mh, 5); ctx.stroke();
+
+      ctx.save();
+      ctx.translate(mx + mw / 2 - 4, my - 10);
+      ctx.font = "9px ui-monospace, monospace";
+      ctx.fillStyle = low ? "#fca5a5" : "rgba(200,225,255,.8)";
+      ctx.textAlign = "center";
+      ctx.fillText("O2", 4, 0);
+      ctx.restore();
+      ctx.textAlign = "right";
+    }
+
+    // altitude / thin-air readout while above the clouds
+    if (s.y < CLOUD_Y) {
+      const t = skyT(s.y);
+      const pct = Math.round((1 - t) * (1 - t) * 100);
+      ctx.textAlign = "center";
+      ctx.font = "11px ui-monospace, monospace";
+      ctx.fillStyle = pct < 25 ? "#fca5a5" : "#dbeafe";
+      ctx.fillText(`ALTITUDE ${Math.round(t * 100)}%  ·  FLAP ${pct}%`, W / 2, 88);
+      ctx.textAlign = "right";
+    }
+
+    // bazooka charge
+    if (s.bazooka) {
+      const togo = s.bazooka - (s.flapCount % s.bazooka);
+      const ready = togo === s.bazooka;
+      ctx.fillStyle = ready ? "#fbbf24" : "rgba(251,191,36,.5)";
+      ctx.font = "11px ui-monospace, monospace";
+      ctx.fillText(`\u{1F680} ${togo}`, W - 12, s.shields > 0 ? 134 : 116);
+    }
+
+    // flock warning
+    if (s.flock > 0 && s.foes.length) {
+      ctx.fillStyle = "#93c5fd";
+      ctx.font = "11px ui-monospace, monospace";
+      ctx.fillText(`\u{1F426} ${s.foes.length} INCOMING`, W - 12, s.shields > 0 ? 116 : 98);
+    }
+
+    // bouncy beak readiness
+    if (s.bouncy) {
+      const armed = s.rot * s.gravDir >= MAX_ROT - 0.06 && s.bounceCool <= 0;
+      ctx.fillStyle = armed ? "#34d399" : "rgba(52,211,153,.45)";
+      ctx.font = "11px ui-monospace, monospace";
+      ctx.fillText(armed ? "\u2934 BEAK ARMED" : "\u2934 DIVE TO ARM",
+                   W - 12, s.shields > 0 ? 98 : 80);
+    }
+
+    // hungry-pipes warning
+    if (s.lurchEvery) {
+      const sliding = s.lurchQueue > 0;
+      const warning = s.lurchWarn > 0;
+      const togo = s.lurchEvery - (s.flapCount % s.lurchEvery);
+      ctx.fillStyle = (sliding || warning) ? "#fb923c" : "#fdba74";
+      ctx.font = "11px ui-monospace, monospace";
+      const label = warning ? "\u21e4 BRACE" : sliding ? "\u21e4 LUNGING" : `\u21e4 LUNGE IN ${togo}`;
+      ctx.fillText(label, W - 12, s.shields > 0 ? 80 : 62);
+    }
+
+    // upside-down indicator
+    if (s.upsideDown) {
+      ctx.fillStyle = "#c4b5fd";
+      ctx.font = "11px ui-monospace, monospace";
+      ctx.fillText("\u2912 INVERTED", W - 12, s.shields > 0 ? 152 : 134);
+    }
+
+    // gravity-flip warning
+    if (s.invertEvery) {
+      const togo = s.invertEvery - (s.flapCount % s.invertEvery);
+      ctx.fillStyle = "#c4b5fd";
+      ctx.font = "11px ui-monospace, monospace";
+      ctx.fillText(`⇅ FLIP IN ${togo}${s.unstableDiscount ? " · ½G" : ""}`,
+                   W - 12, s.shields > 0 ? 62 : 44);
+    }
+    ctx.textAlign = "left";
+  }
+
+  if (s && s.flash > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${s.flash * 0.4})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // ---- low / no oxygen alarm ----
+  if (s && mode === "play" && s.inSky && s.o2 <= O2_WARN) {
+    const pulse = 0.5 + 0.5 * Math.sin(s.t * 14);
+    const out = s.o2 <= 0;
+
+    // Red vignette washing in from the edges.
+    const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.22, W / 2, H / 2, H * 0.72);
+    vg.addColorStop(0, "rgba(200,0,20,0)");
+    vg.addColorStop(1, `rgba(200,0,20,${(out ? 0.5 : 0.3) * (0.55 + pulse * 0.45)})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = "center";
+    ctx.font = "bold 22px ui-monospace, monospace";
+    ctx.globalAlpha = out ? 1 : 0.45 + pulse * 0.55;
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(40,0,6,.85)";
+    const msg = out ? "NO OXYGEN" : "OXYGEN LOW";
+    ctx.strokeText(msg, W / 2, H * 0.34);
+    ctx.fillStyle = out ? "#fff" : "#ff5d5d";
+    ctx.fillText(msg, W / 2, H * 0.34);
+
+    ctx.font = "11px ui-monospace, monospace";
+    ctx.strokeText("DESCEND", W / 2, H * 0.34 + 22);
+    ctx.fillText("DESCEND", W / 2, H * 0.34 + 22);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
+  }
+
+  ctx.restore();
+}
+
+// ============================================================
+//  LOOP
+// ============================================================
+let last = performance.now();
+// Pending flaps from real input, consumed by the next physics step. Input has
+// to be queued rather than applied immediately, or a flap could land between
+// steps and change the outcome depending on display refresh rate.
+let flapQueue = 0;
+let accum = 0;
+
+function frame(now) {
+  let elapsed = (now - last) / 1000;
+  last = now;
+  if (elapsed > 0.25) elapsed = 0.25;   // clamp after a tab-switch or lag spike
+
+  // Screen shake decays on wall-clock time; it is cosmetic and not simulated.
+  if (S && S.shake > 0) {
+    const rate = mode === "over" ? 16 : 40;
+    S.shake = Math.max(0, S.shake - elapsed * rate);
+  }
+
+  if (mode === "play") {
+    // FIXED TIMESTEP. The simulation only ever advances in PHYS_DT increments,
+    // so a run plays out identically at 30Hz, 60Hz or 144Hz — and a replay,
+    // which feeds the same flaps at the same step indices, reproduces it
+    // exactly. With a variable step the recorded frame numbers would mean
+    // different amounts of simulated time and the replay would drift apart.
+    accum += elapsed * (replay ? (replay.speed || 1) : 1);
+    let steps = 0;
+    while (accum >= PHYS_DT && steps < MAX_STEPS) {
+      accum -= PHYS_DT;
+      steps++;
+
+      if (replay) {
+        // Replay input: fire every flap recorded for this step.
+        let guard = 0;
+        while (replay.at < replay.flaps.length &&
+               replay.flaps[replay.at] <= rec.frame && guard++ < 8) {
+          replay.at++;
+          flap();
+        }
+      } else if (flapQueue > 0) {
+        flapQueue--;
+        flap();
+      }
+
+      update(PHYS_DT);
+      if (mode !== "play") break;        // died or hit an upgrade screen
+    }
+    // Do not let a long stall bank up work indefinitely.
+    if (accum > PHYS_DT * MAX_STEPS) accum = 0;
+  } else {
+    accum = 0;
+    flapQueue = 0;
+  }
+
+  // Count the restart lock down on the score screen.
+  if (mode === "over") {
+    const left = RESTART_LOCK - (now - overAt) / 1000;
+    const btn = $("againBtn");
+    const hint = $("overHint");
+    if (left > 0) {
+      btn.textContent = "WAIT\u2026";
+      if (hint) hint.textContent = "hold on\u2026";
+    } else if (btn.disabled) {
+      btn.disabled = false;
+      btn.textContent = "RETRY";
+      btn.style.opacity = "1";
+      btn.style.cursor = "pointer";
+      if (hint) hint.textContent = "SPACE / R to restart";
+    }
+  }
+
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
