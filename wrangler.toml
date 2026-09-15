@@ -2,21 +2,16 @@ name = "flappy-roguelite"
 compatibility_date = "2024-11-01"
 pages_build_output_dir = "public"
 
-# The global scoreboard needs a KV namespace bound as SCORES.
+# Global scoreboard storage.
 #
-# For Pages, bind it in the dashboard — that is what production actually uses:
-#   Workers & Pages -> your project -> Settings -> Bindings -> Add -> KV
-#   Variable name: SCORES   (add it for BOTH Production and Preview)
+# With a wrangler.toml present, Cloudflare treats this file as the source of
+# truth for Pages bindings and disables editing them in the dashboard — so the
+# namespace ids have to live here.
 #
-# No binding is required for the site to work: the API reports itself as
-# unconfigured and the game falls back to local-only scores.
-#
-# Only for local `wrangler pages dev` do you need ids here. Create them with
-#   npx wrangler kv namespace create SCORES
-#   npx wrangler kv namespace create SCORES --preview
-# then uncomment and paste the ids:
-#
-# [[kv_namespaces]]
-# binding = "SCORES"
-# id = "paste-the-32-char-hex-id-here"
-# preview_id = "paste-the-preview-id-here"
+# Create a namespace under Storage & Databases -> KV, then paste its id below.
+# Ids must be 32-char hex; a placeholder here fails the build with
+# "Error 8000022: Invalid KV namespace ID".
+[[kv_namespaces]]
+binding = "SCORES"
+id = "f5ee632ff1ce443c9e557b81dfbd58af"
+preview_id = "f5ee632ff1ce443c9e557b81dfbd58af"
