@@ -16,11 +16,12 @@ replays still save to `localStorage`.
 
 ```sh
 npm install
-npx wrangler kv namespace create SCORES              # once
-npx wrangler kv namespace create SCORES --preview    # once
-# paste both ids into wrangler.toml
 npm run dev
 ```
+
+That serves the Function too. The global board will report itself as
+unconfigured until you add KV ids to `wrangler.toml` (see the comments there) —
+everything else works regardless.
 
 ## Deploying to Cloudflare Pages
 
@@ -30,8 +31,19 @@ Pages → Connect to Git):
 - **Build command:** *(leave empty — no build step)*
 - **Build output directory:** `public`
 
-Then bind the KV namespace: Settings → Functions → KV namespace bindings, with
-variable name `SCORES` for both Production and Preview.
+The site deploys and plays fine at this point; the global board just reports
+itself as unconfigured.
+
+To switch the global board on, add the KV binding **in the dashboard** —
+Pages Functions read bindings from there, not from `wrangler.toml`:
+
+1. Workers & Pages → your project → **Settings → Bindings → Add → KV namespace**
+2. Variable name: `SCORES`
+3. Pick an existing namespace or create one inline
+4. Add it for **both** Production and Preview, then redeploy
+
+Do **not** put placeholder ids in `wrangler.toml` — Cloudflare validates them as
+hex and the deploy fails with `Error 8000022: Invalid KV namespace ID`.
 
 Or deploy from the CLI:
 
